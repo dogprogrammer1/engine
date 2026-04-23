@@ -1,9 +1,16 @@
 export default class Engine {
-    constructor() {
-        this._running = false;
-        this._lastTime = 0;
+    constructor(board, color) {
+        this.board = board;
+        this.color = color;
     }
-    findBestMove(board, color) {
+    updateBoard(board) {
+        this.board = board;
+    }
+    evaluateBoard(){
+        // Placeholder for board evaluation logic
+        
+    }
+    findBestMove() {
         // Placeholder for move finding logic
         return null;
     }
