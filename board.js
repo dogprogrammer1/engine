@@ -80,6 +80,25 @@ export default class Board {
         return [-1, -1];
     }
 
+    getPieces() {
+        const pieces = [];
+
+        for(let c=0;c<2;c++){
+            for(let t=0;t<6;t++){
+                let piece = this.board[c][t];
+                for(let y=0;y<8;y++){
+                    for(let x=0;x<8;x++){
+                        if(piece.has(x,y)){
+                            pieces.push({ x, y, color: c, type: t });
+                        }
+                    }
+                }
+            }
+        }
+
+        return pieces;
+    }
+
     occupied(x, y) {
         return this.getPiece(x, y)[1] !== -1;
     }
