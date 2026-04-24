@@ -153,12 +153,80 @@ export default class Board {
             for (let x = 0; x < 8; x++) {
                 const p = this.getPiece(x, y);
                 if (p[0] === 1 - color) {
-                    if (this.attacksSquare(x, y, kx, ky)) return true;
+                    if (this.attacksSquare(x, y, kx, ky)) {
+                        return true;
+                    }
                 }
             }
         }
 
         return false;
+    }
+
+    squareAttackedBy(x, y, color) {
+        for (let i = 0; i < 8; i++) {
+            for (let j = 0; j < 8; j++) {
+                const p = this.getPiece(j, i);
+                if (p[0] === color && this.attacksSquare(j, i, x, y)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    canCastleTo(color, x1, y1, x2, y2) { 
+        let homeY;
+        if (color === 0) {
+            homeY = 0;
+        } else {
+            homeY = 7;
+        }
+        
+        if (x1 !== 4 || y1 !== homeY || y2 !== homeY) {
+            return false;
+        }
+
+        if (x2 !== 6 && x2 !== 2) {
+            return false
+        }
+
+        if (this.inCheck(color)) {
+            return false;
+        }
+        
+        const kingside = (x2 === 6);
+
+        let castleIndex;
+        if (color === 0) {
+            castleIndex = kingside ? 0 : 1;
+        } else {
+            castleIndex = kingside ? 2 : 3;
+        }
+
+        const rookX = kingside ? 7 : 0;
+        const rook = this.getPiece(rookX, homeY);
+        const enemy = 1 - color;
+
+        if (!this.canCastle[castleIndex]) {
+            return false;
+        }
+        if (rook[0] !== color || rook[1] !== 3){
+            return false;
+        }
+
+        const emptySquares = kingside ? [5, 6] : [1, 2, 3];
+        if (emptySquares.some(x => this.occupied(x, homeY))) {
+            return false;
+        }
+
+        const kingPath = kingside ? [5, 6] : [3, 2];
+        if (kingPath.some(x => this.squareAttackedBy(x, homeY, enemy))) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     canGetTo(x1, y1, x2, y2) {
@@ -213,15 +281,7 @@ export default class Board {
         if (type === 5) {
             if (this.steps.king.some(s => dx === s[0] && dy === s[1])) return true;
 
-            if (color === 0 && y1 === 0 && y2 === 0) {
-                if (x2 === 6 && this.canCastle[0] && !this.occupied(5,0) && !this.occupied(6,0)) return true;
-                if (x2 === 2 && this.canCastle[1] && !this.occupied(1,0) && !this.occupied(2,0) && !this.occupied(3,0)) return true;
-            }
-
-            if (color === 1 && y1 === 7 && y2 === 7) {
-                if (x2 === 6 && this.canCastle[2] && !this.occupied(5,7) && !this.occupied(6,7)) return true;
-                if (x2 === 2 && this.canCastle[3] && !this.occupied(1,7) && !this.occupied(2,7) && !this.occupied(3,7)) return true;
-            }
+            if (dy === 0 && Math.abs(dx) === 2) return this.canCastleTo(color, x1, y1, x2, y2);
 
             return false;
         }
@@ -276,6 +336,13 @@ export default class Board {
             if (color === 0 && x1 === 7 && y1 === 0) this.canCastle[0] = false;
             if (color === 1 && x1 === 0 && y1 === 7) this.canCastle[3] = false;
             if (color === 1 && x1 === 7 && y1 === 7) this.canCastle[2] = false;
+        }
+
+        if (target[1] === 3) {
+            if (target[0] === 0 && x2 === 0 && y2 === 0) this.canCastle[1] = false;
+            if (target[0] === 0 && x2 === 7 && y2 === 0) this.canCastle[0] = false;
+            if (target[0] === 1 && x2 === 0 && y2 === 7) this.canCastle[3] = false;
+            if (target[0] === 1 && x2 === 7 && y2 === 7) this.canCastle[2] = false;
         }
     }
 
