@@ -386,7 +386,7 @@ export default class Board {
         this.turn = s.turn;
     }
 
-    move(x1, y1, x2, y2) {
+    isLegalMove(x1, y1, x2, y2) {
         const piece = this.getPiece(x1, y1);
 
         if (piece[0] !== this.turn) return false;
@@ -403,6 +403,14 @@ export default class Board {
             return false;
         }
 
+        this.restoreState(save);
+        return true;
+    }
+
+    move(x1, y1, x2, y2) {
+        if (!this.isLegalMove(x1, y1, x2, y2)) return false;
+
+        this.rawMove(x1, y1, x2, y2);
         this.turn = 1 - this.turn;
         return true;
     }
