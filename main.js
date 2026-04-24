@@ -1,5 +1,5 @@
 import Board from "./board.js";
-import Llong from "./board.js";
+import { drawPieces } from "./renderer.js";
 
 let b = new Board();
 
@@ -24,7 +24,7 @@ function drawBoard(){
             ctx.fillRect(x*60,y*60,60,60);
         }
     }
-    b.drawPieces(ctx);
+    drawPieces(ctx, b);
 }
 
 
