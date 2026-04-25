@@ -1,0 +1,5 @@
+.env
+node_modules/
+
+training/datasets/
+training/models/
