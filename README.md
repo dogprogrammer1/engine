@@ -1,70 +1,49 @@
-Final Project Plan: 3D Chess against bot
+# 3D Chess AI - Project Plan
 
-1. Description
-The game will show a chessboard using a custom 3D renderer built with quaternions
+### 1. Description
+The game will show a chessboard using a custom 3D renderer built with quaternions. The player will be able to choose between two AI difficulties. Both difficulties will use a tree with minimax and alpha beta pruning.
 
-The player will be able to choose between two AI difficulties.
+* **Easy:** will use an evaluation function only baesd on material advantage and piece activity.
+* **Hard:** will use an evaluation function with a neural network inspired by NNUE.
 
-Both difficulties will use a tree with minimax and alpha beta pruning
+### 2. Technology
+* **Graphics:** javascript and html w custom 3d renderer (quaternions)
+* **AI:** Python (TensorFlow) for training neural network which can be exported through json to run in browser.
 
-Easy AI will use an evaluation function only baesd on material advantage and piece activity.
-
-Hard AI will use an evaluation function with a neural network inspired by NNUE.
-
-2. Technology
-javascript and html for web graphics and 3d renderer
-python for neural network
-
-3. Features
-
-Play button
-Easy difficulty button
-Hard difficulty button
-3D chess board and all
-AI move after player move
-Camera rotation
-Move validation and all the other chess rules
-
-These must work for the project to count as successful:
-
-Working chessboard with chess moves and all
-Minimax with alpha-beta pruning
-Easy AI evaluation using material and piece activity
-Hard AI with neural network
+### 3. Features
+* **Main Menu:** Easy and Hard difficulty selection
+* **Game Scene:** 3D board with rotation and piece movement and AI
+* **End Scene:** Game results and restart option
 
 
-These should be included after the core game works:
+### 4. Version Plan
+* **V1:** Full chess rules, minimax search with alpha beta pruning, and a basic 3D board.
+* **V2:** Evaluation function through material advantage and piece activity and Camera rotation.
+* **V3:** NNUE inspired neural network evaluation and sounds.
 
-3D rendererd chess board and rotation
-Menu
-Sound effects
+### 5. Architecture
+**Main Classes:**
+* Game
+* Board
+* Piece
+* Move
+* AI
+* Renderer
+* Camera
+* Button
 
-4. High-Level Architecture
-Objects / Classes:
-Game
-Board
-Piece
-Move
-AI
-Renderer
-Camera
-Button
-Minimax search
-Alpha-beta pruning
-Board evaluation
+**Other important methods/classes:**
+* Minimax
+* alpha beta
+* Board Evaluation
 
-Scenes:
-Main Menu
-Game Scene
-End Scene
+**Scenes:**
+* Main Menu
+* Game
+* End Screen
 
-5. Timeline
+### 6. Timeline
+* **Week 1:** alpha beta pruning and easy ai
+* **Week 2:** neural network implementation and basic 3d view
+* **Week 3:** quaternions rotation and better user experience
 
-Week 1:
-finish pruning and easy evaluation function
-
-Week 2:
-neural network implemented and simple 3d rendered
-
-Week 3:
-rotation w quaternions and good user experience
