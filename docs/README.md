@@ -10,11 +10,12 @@ The game will show a chessboard using a custom 3D renderer built with quaternion
 * **Graphics:** javascript and html w custom 3d renderer (quaternions)
 * **AI:** Python (TensorFlow) for training neural network which can be exported through json to run in browser.
 
-### 3. Features
+### 3. Features & Mock-up
 * **Main Menu:** Easy and Hard difficulty selection
 * **Game Scene:** 3D board with rotation and piece movement and AI
 * **End Scene:** Game results and restart option
 
+![Mock-up](mock-up.png)
 
 ### 4. Version Plan
 * **V1:** Full chess rules, minimax search with alpha beta pruning, and a basic 3D board.
