@@ -29,6 +29,8 @@ class Llong {
     }
 }
 
+const EMPTY = -1;
+
 export default class Board {
     constructor() {
         this.reset();
@@ -65,34 +67,67 @@ export default class Board {
             king: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],
             knight: [[1,2],[1,-2],[-1,2],[-1,-2],[2,1],[2,-1],[-2,1],[-2,-1]]
         };
+
+        this.rebuildSquares();
     }
 
     inside(x, y) {
         return x >= 0 && x < 8 && y >= 0 && y < 8;
     }
 
-    getPiece(x, y) {
+    squareIndex(x, y) {
+        return y * 8 + x;
+    }
+
+    getPieceCode(x, y) {
+        return this.squares[this.squareIndex(x, y)];
+    }
+
+    setPieceCode(x, y, code) {
+        this.squares[this.squareIndex(x, y)] = code;
+    }
+
+    rebuildSquares() {
+        this.squares = new Array(64).fill(EMPTY);
+
         for (let c = 0; c < 2; c++) {
             for (let t = 0; t < 6; t++) {
-                if (this.board[c][t].has(x, y)) return [c, t];
+                const piece = this.board[c][t];
+
+                for (let y = 0; y < 8; y++) {
+                    for (let x = 0; x < 8; x++) {
+                        if (piece.has(x, y)) {
+                            this.setPieceCode(x, y, c * 6 + t);
+                        }
+                    }
+                }
             }
         }
-        return [-1, -1];
+    }
+
+    getPiece(x, y) {
+        const code = this.getPieceCode(x, y);
+        if (code === EMPTY) {
+            return [-1, -1];
+        }
+
+        return [Math.floor(code / 6), code % 6];
     }
 
     getPieces() {
         const pieces = [];
 
-        for(let c=0;c<2;c++){
-            for(let t=0;t<6;t++){
-                let piece = this.board[c][t];
-                for(let y=0;y<8;y++){
-                    for(let x=0;x<8;x++){
-                        if(piece.has(x,y)){
-                            pieces.push({ x, y, color: c, type: t });
-                        }
-                    }
-                }
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const code = this.getPieceCode(x, y);
+                if (code === EMPTY) continue;
+
+                pieces.push({
+                    x,
+                    y,
+                    color: Math.floor(code / 6),
+                    type: code % 6
+                });
             }
         }
 
@@ -100,15 +135,17 @@ export default class Board {
     }
 
     occupied(x, y) {
-        return this.getPiece(x, y)[1] !== -1;
+        return this.getPieceCode(x, y) !== EMPTY;
     }
 
     sameColor(x, y, color) {
-        return this.getPiece(x, y)[0] === color;
+        const code = this.getPieceCode(x, y);
+        return code !== EMPTY && Math.floor(code / 6) === color;
     }
 
     enemyColor(x, y, color) {
-        return this.getPiece(x, y)[0] === 1 - color;
+        const code = this.getPieceCode(x, y);
+        return code !== EMPTY && Math.floor(code / 6) === 1 - color;
     }
 
     slideCanReach(x1, y1, x2, y2, dirs) {
@@ -325,18 +362,29 @@ export default class Board {
         ) {
             const capY = color === 0 ? y2 - 1 : y2 + 1;
             this.board[enemy][0].clear(x2, capY);
+            this.setPieceCode(x2, capY, EMPTY);
         }
 
         this.board[color][type].move(x1, y1, x2, y2);
+        this.setPieceCode(x1, y1, EMPTY);
+        this.setPieceCode(x2, y2, color * 6 + type);
 
         if (type === 5 && Math.abs(x2 - x1) === 2) {
-            if (x2 === 6) this.board[color][3].move(7, y1, 5, y1);
-            else this.board[color][3].move(0, y1, 3, y1);
+            if (x2 === 6) {
+                this.board[color][3].move(7, y1, 5, y1);
+                this.setPieceCode(7, y1, EMPTY);
+                this.setPieceCode(5, y1, color * 6 + 3);
+            } else {
+                this.board[color][3].move(0, y1, 3, y1);
+                this.setPieceCode(0, y1, EMPTY);
+                this.setPieceCode(3, y1, color * 6 + 3);
+            }
         }
 
         if (type === 0 && (y2 === 7 || y2 === 0)) {
             this.board[color][0].clear(x2, y2);
             this.board[color][4].set(x2, y2);
+            this.setPieceCode(x2, y2, color * 6 + 4);
         }
 
         this.enPassant = [-1, -1];
@@ -384,6 +432,7 @@ export default class Board {
         this.canCastle = [...s.castle];
         this.enPassant = [...s.ep];
         this.turn = s.turn;
+        this.rebuildSquares();
     }
 
     isLegalMove(x1, y1, x2, y2) {
