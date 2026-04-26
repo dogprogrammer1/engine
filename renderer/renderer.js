@@ -6,7 +6,7 @@ import {
     PIECE_OFFSET_Y,
     PIECE_SYMBOLS,
     SQUARE_SIZE
-} from "./ui-constants.js";
+} from "../ui-constants.js";
 
 export default class Renderer {
     constructor(canvas) {
