@@ -58,7 +58,7 @@ export default class Board {
 
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
-        this.turn = 1; // 0 = white, 1 = black
+        this.turn = 0; // 0 = white, 1 = black
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
@@ -481,6 +481,74 @@ export default class Board {
 
         this.turn = saveTurn;
         return moves;
+    }
+
+    squareName(x, y) {
+        return "abcdefgh"[x] + (y + 1);
+    }
+
+    // Key FEN Components (Example: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1) 
+    // 1. Piece Placement: Lists pieces rank-by-rank starting from 8 down to 1, separated by slashes (/). Uppercase letters are White (PNBRQK), lowercase are Black (pnbrqk), and numbers indicate consecutive empty squares.
+    // 2. Active Color: w means it is White's turn, b means Black's turn.
+    // 3. Castling Rights: Indicates if castling is still possible for either side (K, Q, k, q). If not, a - is used.
+    // 4. En Passant Target: If a pawn just moved two squares, the square behind it is listed; otherwise, a - is used.
+    // 5. Halfmove Clock: The number of halfmoves since the last capture or pawn move, used for the 50-move draw rule.
+    // 6. Fullmove Number: The total turn number, starting at 1 and incrementing after black moves. 
+    toFEN() {
+        const pieceChars = ["p", "b", "n", "r", "q", "k"];
+        const ranks = [];
+
+        for (let y = 7; y >= 0; y--) {
+            let rank = "";
+            let empty = 0;
+
+            for (let x = 0; x < 8; x++) {
+                const [color, type] = this.getPiece(x, y);
+
+                if (type === -1) {
+                    empty++;
+                    continue;
+                }
+
+                if (empty > 0) {
+                    rank += empty;
+                    empty = 0;
+                }
+
+                const piece = pieceChars[type];
+                rank += color === 0 ? piece.toUpperCase() : piece;
+            }
+
+            if (empty > 0) {
+                rank += empty;
+            }
+            ranks.push(rank);
+        }
+
+        let castling = "";
+        if (this.canCastle[0]) {
+            castling += "K"
+        }
+        if (this.canCastle[1]) {
+            castling += "Q"
+        }
+        if (this.canCastle[2]) {
+            castling += 'k'
+        }
+        if (this.canCastle[3]) {
+            castling += 'q';
+        }
+        if (castling === "") {
+            castling = "-";
+        }
+
+        if (this.enPassant[0] === -1) {
+            const enPassant = "-";
+        } else {
+            this.squareName(this.enPassant[0], this.enPassant[1]);
+        }
+        
+        return `${ranks.join("/")} ${this.turn === 0 ? "w" : "b"} ${castling} ${enPassant} 0 1`;
     }
 
     move(x1, y1, x2, y2) {
