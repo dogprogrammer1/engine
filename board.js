@@ -58,7 +58,7 @@ export default class Board {
 
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
-        this.turn = 1; // 1 = white, 0 = black
+        this.turn = 0; // 0 = white, 1 = black
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
@@ -454,6 +454,33 @@ export default class Board {
 
         this.restoreState(save);
         return true;
+    }
+
+    generateLegalMoves(color = this.turn) {
+        const moves = [];
+        const saveTurn = this.turn;
+
+        this.turn = color;
+
+        for (let y1 = 0; y1 < 8; y1++) {
+            for (let x1 = 0; x1 < 8; x1++) {
+                const piece = this.getPiece(x1, y1);
+                if (piece[0] !== color) {
+                    continue;
+                }
+
+                for (let y2 = 0; y2 < 8; y2++) {
+                    for (let x2 = 0; x2 < 8; x2++) {
+                        if (this.isLegalMove(x1, y1, x2, y2)) {
+                            moves.push({ x1, y1, x2, y2 });
+                        }
+                    }
+                }
+            }
+        }
+
+        this.turn = saveTurn;
+        return moves;
     }
 
     move(x1, y1, x2, y2) {
