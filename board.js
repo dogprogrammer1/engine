@@ -58,7 +58,7 @@ export default class Board {
 
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
-        this.turn = 0; // 0 = white, 1 = black
+        this.turn = 1; // 1 = white, 0 = black
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
@@ -484,7 +484,7 @@ export default class Board {
     }
 
     squareName(x, y) {
-        return "abcdefgh"[x] + (y + 1);
+        return "abcdefgh"[x] + (8 - y);
     }
 
     // Key FEN Components (Example: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1) 
@@ -498,7 +498,7 @@ export default class Board {
         const pieceChars = ["p", "b", "n", "r", "q", "k"];
         const ranks = [];
 
-        for (let y = 7; y >= 0; y--) {
+        for (let y = 0; y < 8; y++) {
             let rank = "";
             let empty = 0;
 
@@ -516,7 +516,7 @@ export default class Board {
                 }
 
                 const piece = pieceChars[type];
-                rank += color === 0 ? piece.toUpperCase() : piece;
+                rank += color === 1 ? piece.toUpperCase() : piece;
             }
 
             if (empty > 0) {
@@ -526,29 +526,27 @@ export default class Board {
         }
 
         let castling = "";
-        if (this.canCastle[0]) {
+        if (this.canCastle[2]) {
             castling += "K"
         }
-        if (this.canCastle[1]) {
+        if (this.canCastle[3]) {
             castling += "Q"
         }
-        if (this.canCastle[2]) {
+        if (this.canCastle[0]) {
             castling += 'k'
         }
-        if (this.canCastle[3]) {
+        if (this.canCastle[1]) {
             castling += 'q';
         }
         if (castling === "") {
             castling = "-";
         }
 
-        if (this.enPassant[0] === -1) {
-            const enPassant = "-";
-        } else {
-            this.squareName(this.enPassant[0], this.enPassant[1]);
-        }
+        const enPassant = this.enPassant[0] === -1
+            ? "-"
+            : this.squareName(this.enPassant[0], this.enPassant[1]);
         
-        return `${ranks.join("/")} ${this.turn === 0 ? "w" : "b"} ${castling} ${enPassant} 0 1`;
+        return `${ranks.join("/")} ${this.turn === 1 ? "w" : "b"} ${castling} ${enPassant} 0 1`;
     }
 
     move(x1, y1, x2, y2) {
