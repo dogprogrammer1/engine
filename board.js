@@ -58,7 +58,7 @@ export default class Board {
 
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
-        this.turn = 0; // 0 = white, 1 = black
+        this.turn = 1; // 0 = white, 1 = black
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
