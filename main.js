@@ -1,5 +1,5 @@
 import Game from "./game.js";
-import Renderer from "./renderer.js";
+import Renderer from "./renderer/renderer.js";
 import { SQUARE_SIZE } from "./ui-constants.js";
 
 const canvas = document.getElementById("canvas");
