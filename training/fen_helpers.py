@@ -1,57 +1,67 @@
-PIECE_CHARS = ["p", "b", "n", "r", "q", "k"]
+import numpy as np
 
+PIECE_TO_PLANE = {
+    "P": 0,
+    "B": 1,
+    "N": 2,
+    "R": 3,
+    "Q": 4,
+    "K": 5,
+    "p": 6,
+    "b": 7,
+    "n": 8,
+    "r": 9,
+    "q": 10,
+    "k": 11,
+}
 
-def square_name(x, y):
-    return "abcdefgh"[x] + str(8 - y)
+def encode_fen(fen):
+    """Really cool encoder for NN training it just turns FEN into 18x8x8 tensor :O
+    what each plane does:
+    0-5   white pieces
+    6-11  black pieces
+    12    wtv side to move
+    13    white kingside castling
+    14    white queenside castling
+    15    black kingside castling
+    16    black queenside castling
+    17    en passant square
+    """
 
-def to_fen(board):
-    ranks = []
+    parts = fen.strip().split()
 
-    for y in range(8):
-        rank = ""
-        empty = 0
+    piece_placement, active_color, castling, en_passant = parts[:4]
+    tensor = np.zeros((18, 8, 8), dtype=np.float32)
 
-        for x in range(8):
-            color, piece_type = board.getPiece(x, y)
+    ranks = piece_placement.split("/")
 
-            if piece_type == -1:
-                empty += 1
+    for y, rank in enumerate(ranks):
+        x = 0
+        for char in rank:
+            if char.isdigit():
+                x += int(char)
                 continue
 
-            if empty > 0:
-                rank += str(empty)
-                empty = 0
+            tensor[PIECE_TO_PLANE[char], y, x] = 1.0
+            x += 1
 
-            piece = PIECE_CHARS[piece_type]
-            if (color == 1):
-                rank += piece.upper()
-            else:
-                rank += piece
+    if active_color == "w":
+        tensor[12, :, :] = 1.0
 
-        if empty > 0:
-            rank += str(empty)
+    if castling != "-":
+        if "K" in castling:
+            tensor[13, :, :] = 1.0
+        if "Q" in castling:
+            tensor[14, :, :] = 1.0
+        if "k" in castling:
+            tensor[15, :, :] = 1.0
+        if "q" in castling:
+            tensor[16, :, :] = 1.0
 
-        ranks.append(rank)
+    if en_passant != "-":
+        file_char, rank_char = en_passant
+        x = "abcdefgh".index(file_char)
+        y = 8 - int(rank_char)
+        tensor[17, y, x] = 1.0
 
-    castling = ""
-    if board.canCastle[2]:
-        castling += "K"
-    if board.canCastle[3]:
-        castling += "Q"
-    if board.canCastle[0]:
-        castling += "k"
-    if board.canCastle[1]:
-        castling += "q"
-    if not castling:
-        castling = "-"
-
-    if board.enPassant[0] == -1:
-        en_passant = "-"
-    else:
-        en_passant = square_name(board.enPassant[0], board.enPassant[1])
-
-    if board.turn == 1:
-        color = "w"
-    else:
-        color = "b"
-    return f"{'/'.join(ranks)} {active_color} {castling} {en_passant} 0 1"
+    return tensor
