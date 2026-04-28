@@ -5,9 +5,6 @@ import torch
 from torch.utils.data import Dataset
 from fen_helpers import encode_fen
 
-ROWS = 100_000
-MIN_DEPTH = 25
-
 
 def eval_to_target(cp, mate):
     if pd.notna(mate):
@@ -22,10 +19,7 @@ def eval_to_target(cp, mate):
     # tanh is the hyperbolic tan function, maps centipawns to -1 to 1
     return math.tanh(float(cp) / 400)
 
-def load_rows(path, limit = ROWS, min_depth = MIN_DEPTH, columns=None):
-    if columns is None:
-        columns = ["FEN", "EvalCp", "EvalMate", "Depth"]
-
+def load_rows(path, limit = 100_000, min_depth = 25, columns=["FEN", "EvalCp", "EvalMate", "Depth"]):
     df = pd.read_parquet(path, columns=columns)
     df = df[df["Depth"] >= min_depth]
 
