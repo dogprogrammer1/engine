@@ -43,16 +43,16 @@ export default class Board {
                 new Llong(0x0000000000000024n),
                 new Llong(0x0000000000000042n),
                 new Llong(0x0000000000000081n),
-                new Llong(0x0000000000000008n),
-                new Llong(0x0000000000000010n)
+                new Llong(0x0000000000000010n),
+                new Llong(0x0000000000000008n)
             ],
             [
                 new Llong(0x00FF000000000000n),
                 new Llong(0x2400000000000000n),
                 new Llong(0x4200000000000000n),
                 new Llong(0x8100000000000000n),
-                new Llong(0x0800000000000000n),
-                new Llong(0x1000000000000000n)
+                new Llong(0x1000000000000000n),
+                new Llong(0x0800000000000000n)
             ]
         ];
 

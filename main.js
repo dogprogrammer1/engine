@@ -1,14 +1,20 @@
 import Game from "./game.js";
-import Renderer from "./renderer/renderer.js";
-import { SQUARE_SIZE } from "./ui-constants.js";
+import Renderer3D from "./renderer/3render.js";
 
 const canvas = document.getElementById("canvas");
-const renderer = new Renderer(canvas);
+const renderer = new Renderer3D(canvas);
 const game = new Game(renderer);
 
-canvas.addEventListener("click", e => {
-    let x = Math.floor(e.offsetX / SQUARE_SIZE);
-    let y = Math.floor(e.offsetY / SQUARE_SIZE);
+canvas.addEventListener("boardClick", e => {
+    const { x, y } = e.detail;
     game.click(x, y);
 });
+
 game.draw();
+
+// Continuous render loop for 3D renderer
+function gameLoop() {
+    game.draw();
+    requestAnimationFrame(gameLoop);
+}
+gameLoop();

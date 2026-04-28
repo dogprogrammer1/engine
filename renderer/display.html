@@ -3,10 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Renderer</title>
+    <title>3D Chess</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+    </style>
 </head>
 <body>
-    <canvas id="canvas" height="500" width="500"></canvas>
-    <script type="module" src="./main.js"></script>
+    <canvas id="canvas"></canvas>
+    <div id="info">
+        <p><strong>3D Chess</strong></p>
+        <p>Controls: WASD to move, Arrow keys to rotate, Space/Shift for up/down</p>
+        <p>Click on squares to move pieces</p>
+    </div>
+    <script type="module" src="../main.js"></script>
 </body>
 </html>
