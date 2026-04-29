@@ -618,7 +618,7 @@ export default class Renderer3D {
       const projPoints = camPoints.map(p => this.projectCameraSpace(p));
 
       // Draw edges
-      this.ctx.strokeStyle = piece.color === 0 ? "#333" : "#eee";
+      this.ctx.strokeStyle = piece.color === 0 ? "#eee" : "#333";
       this.ctx.lineWidth = 2;
 
       for (const [a, b] of piece.getEdges()) {

@@ -43,22 +43,22 @@ export default class Board {
                 new Llong(0x0000000000000024n),
                 new Llong(0x0000000000000042n),
                 new Llong(0x0000000000000081n),
-                new Llong(0x0000000000000010n),
-                new Llong(0x0000000000000008n)
+                new Llong(0x0000000000000008n),
+                new Llong(0x0000000000000010n)
             ],
             [
                 new Llong(0x00FF000000000000n),
                 new Llong(0x2400000000000000n),
                 new Llong(0x4200000000000000n),
                 new Llong(0x8100000000000000n),
-                new Llong(0x1000000000000000n),
-                new Llong(0x0800000000000000n)
+                new Llong(0x0800000000000000n),
+                new Llong(0x1000000000000000n)
             ]
         ];
 
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
-        this.turn = 1; // 1 = white, 0 = black
+        this.turn = 0; // 0 for white, 1 for black
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
@@ -348,7 +348,7 @@ export default class Board {
     rawMove(x1, y1, x2, y2) {
         const [color, type] = this.getPiece(x1, y1);
         const enemy = 1 - color;
-
+        console.log(x1, y1, x2, y2, color, type);
         const target = this.getPiece(x2, y2);
         if (target[1] !== -1) {
             this.board[target[0]][target[1]].clear(x2, y2);
@@ -371,13 +371,21 @@ export default class Board {
 
         if (type === 5 && Math.abs(x2 - x1) === 2) {
             if (x2 === 6) {
+                // Kingside castling: rook h-file to f-file
                 this.board[color][3].move(7, y1, 5, y1);
                 this.setPieceCode(7, y1, EMPTY);
                 this.setPieceCode(5, y1, color * 6 + 3);
+                // Clear rook's castling rights for this side
+                if (color === 0) this.canCastle[0] = false;
+                else this.canCastle[2] = false;
             } else {
+                // Queenside castling: rook a-file to d-file
                 this.board[color][3].move(0, y1, 3, y1);
                 this.setPieceCode(0, y1, EMPTY);
                 this.setPieceCode(3, y1, color * 6 + 3);
+                // Clear rook's castling rights for this side
+                if (color === 0) this.canCastle[1] = false;
+                else this.canCastle[3] = false;
             }
         }
 
@@ -526,16 +534,16 @@ export default class Board {
         }
 
         let castling = "";
-        if (this.canCastle[2]) {
+        if (this.canCastle[0]) {
             castling += "K"
         }
-        if (this.canCastle[3]) {
+        if (this.canCastle[1]) {
             castling += "Q"
         }
-        if (this.canCastle[0]) {
+        if (this.canCastle[2]) {
             castling += 'k'
         }
-        if (this.canCastle[1]) {
+        if (this.canCastle[3]) {
             castling += 'q';
         }
         if (castling === "") {
@@ -553,7 +561,10 @@ export default class Board {
         if (!this.isLegalMove(x1, y1, x2, y2)) return false;
 
         this.rawMove(x1, y1, x2, y2);
+        this.rebuildSquares();
         this.turn = 1 - this.turn;
+        console.log(x1, y1, x2, y2);
         return true;
+
     }
 }
