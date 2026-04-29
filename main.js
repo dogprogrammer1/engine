@@ -1,5 +1,5 @@
 import Game from "./game.js";
-import Renderer3D from "./renderer/3render.js";
+import Renderer3D from "./renderer/3drenderer.js";
 
 const canvas = document.getElementById("canvas");
 const renderer = new Renderer3D(canvas);
