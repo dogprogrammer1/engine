@@ -6,9 +6,15 @@ export default class Engine {
     updateBoard(board) {
         this.board = board;
     }
-    evaluateBoard(){
+    evaluateBoardClassical(){
         // Placeholder for board evaluation logic
         
+    }
+    evaluateBoardNN(){
+        // Placeholder for neural network evaluation logic
+    }
+    evaluateBoardNNUE(){
+        // Placeholder for NNUE evaluation logic
     }
     findBestMove() {
         // Placeholder for move finding logic

@@ -69,10 +69,13 @@ export default class Board {
                 new Llong(0x0000000000000010n)
             ]
         ];
-
+        
+        this.gameResult = null;
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
         this.turn = WHITE;
+        this.halfmoveClock = 0;
+        this.moveHistory = [];
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
@@ -442,6 +445,13 @@ export default class Board {
             if (target[0] === BLACK && x2 === 0 && y2 === 0) this.canCastle[BLACK_QUEENSIDE] = false;
             if (target[0] === BLACK && x2 === 7 && y2 === 0) this.canCastle[BLACK_KINGSIDE] = false;
         }
+
+        // Update halfmove clock: reset on capture or pawn move, increment otherwise
+        if (target[1] !== -1 || type === PAWN) {
+            this.halfmoveClock = 0;
+        } else {
+            this.halfmoveClock++;
+        }
     }
 
     cloneState() {
@@ -449,7 +459,9 @@ export default class Board {
             board: this.board.map(side => side.map(p => p.val)),
             castle: [...this.canCastle],
             ep: [...this.enPassant],
-            turn: this.turn
+            turn: this.turn,
+            halfmoveClock: this.halfmoveClock,
+            gameResult: this.gameResult
         };
     }
 
@@ -463,6 +475,8 @@ export default class Board {
         this.canCastle = [...s.castle];
         this.enPassant = [...s.ep];
         this.turn = s.turn;
+        this.halfmoveClock = s.halfmoveClock;
+        this.gameResult = s.gameResult;
         this.rebuildSquares();
     }
 
@@ -512,6 +526,24 @@ export default class Board {
 
         this.turn = saveTurn;
         return moves;
+    }
+
+    isCheckmate(color) {
+        if (!this.inCheck(color)) {
+            return false;
+        }
+
+        const legalMoves = this.generateLegalMoves(color);
+        return legalMoves.length === 0;
+    }
+
+    isStalemate(color) {
+        if (this.inCheck(color)) {
+            return false;
+        }
+
+        const legalMoves = this.generateLegalMoves(color);
+        return legalMoves.length === 0;
     }
 
     squareName(x, y) {
@@ -580,13 +612,115 @@ export default class Board {
         return `${ranks.join("/")} ${this.turn === WHITE ? "w" : "b"} ${castling} ${enPassant} 0 1`;
     }
 
+    moveToFEN() {
+        return this.toFEN();
+    }
+
     move(x1, y1, x2, y2) {
         if (!this.isLegalMove(x1, y1, x2, y2)) return false;
 
         this.rawMove(x1, y1, x2, y2);
         this.rebuildSquares();
         this.turn = 1 - this.turn;
+        this.moveHistory.push(this.toFEN());
+        
+        // Update game result after move
+        this.gameResult = this.isGameOver();
+        if(this.gameResult.over) {
+            console.log(this.gameResult);
+        }
         return true;
 
+    }
+
+    isInsufficientMaterial() {
+        const pieces = this.getPieces();
+
+        // Need at least a pawn, rook, or queen to checkmate
+        for (const p of pieces) {
+            if (p.type === PAWN || p.type === ROOK || p.type === QUEEN) {
+                return false;
+            }
+        }
+
+        // If only kings remain, it's insufficient
+        if (pieces.length === 2) {
+            return true;
+        }
+
+        // King and single knight or bishop vs king is insufficient
+        if (pieces.length === 3) {
+            const minors = pieces.filter(p => p.type === KNIGHT || p.type === BISHOP);
+            return minors.length === 1;
+        }
+
+        // King and two knights vs king (cannot force checkmate)
+        if (pieces.length === 3) {
+            const knights = pieces.filter(p => p.type === KNIGHT);
+            if (knights.length === 2 && knights.every(k => k.color === knights[0].color)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    isThreefoldRepetition() {
+        if (this.moveHistory.length < 8) {
+            return false;
+        }
+
+        const currentFEN = this.toFEN();
+        let count = 0;
+
+        // Count occurrences of current position in move history
+        for (const fen of this.moveHistory) {
+            // Compare FEN without halfmove and fullmove numbers
+            const fenParts = fen.split(' ').slice(0, 4).join(' ');
+            const currentParts = currentFEN.split(' ').slice(0, 4).join(' ');
+            if (fenParts === currentParts) {
+                count++;
+            }
+        }
+
+        // Add current position
+        count++;
+
+        return count >= 3;
+    }
+
+    isFiftyMoveRule() {
+        return this.halfmoveClock >= 100;
+    }
+
+    isGameOver() {
+        const currentPlayer = this.turn;
+        const opponent = this.opponent(currentPlayer);
+
+        // Check checkmate and stalemate
+        if (this.isCheckmate(currentPlayer)) {
+            return { over: true, reason: 'checkmate', winner: opponent };
+        }
+
+        if (this.isStalemate(currentPlayer)) {
+            return { over: true, reason: 'stalemate', winner: -1 };
+        }
+
+        // Check insufficient material
+        if (this.isInsufficientMaterial()) {
+            return { over: true, reason: 'insufficient material', winner: -1 };
+        }
+
+        // Check threefold repetition
+        if (this.isThreefoldRepetition()) {
+            return { over: true, reason: 'threefold repetition', winner: -1 };
+        }
+
+        // Check 50-move rule
+        if (this.isFiftyMoveRule()) {
+            return { over: true, reason: '50-move rule', winner: -1 };
+        }
+
+        return { over: false };
     }
 }
