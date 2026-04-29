@@ -1,3 +1,4 @@
+import Engine from "./engine.js";
 class Llong {
     constructor(x = 0n) {
         this.val = x;
@@ -86,6 +87,9 @@ export default class Board {
         };
 
         this.rebuildSquares();
+        
+        // Initialize engine for evaluation
+        this.engine = new Engine(this, WHITE);
     }
 
     opponent(color) {
@@ -629,6 +633,14 @@ export default class Board {
         if(this.gameResult.over) {
             console.log(this.gameResult);
         }
+        
+        // Update engine's board reference
+        this.engine.updateBoard(this);
+        
+        // Evaluate board position
+        const evaluation = this.engine.evaluateBoardClassical();
+        console.log(`Board evaluation: ${evaluation.toFixed(2)} (${this.turn === WHITE ? 'White' : 'Black'} to move)`);
+        
         return true;
 
     }
