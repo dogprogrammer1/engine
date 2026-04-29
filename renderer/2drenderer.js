@@ -16,6 +16,7 @@ const SELECTED_SQUARE_COLOR = "rgb(84, 96, 223)";
 const WHITE_PIECE_COLOR = "#ffd43a";
 const BLACK_PIECE_COLOR = "#222";
 
+
 export default class Renderer {
     constructor(canvas) {
         this.canvas = canvas;
@@ -46,6 +47,8 @@ export default class Renderer {
 
     drawPieces(board) {
         this.ctx.font = PIECE_FONT;
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
 
         for (const piece of board.getPieces()) {
             this.ctx.fillStyle = piece.color === WHITE
@@ -53,8 +56,8 @@ export default class Renderer {
                 : BLACK_PIECE_COLOR;
             this.ctx.fillText(
                 PIECE_SYMBOLS[piece.type],
-                piece.x * SQUARE_SIZE + PIECE_OFFSET_X,
-                piece.y * SQUARE_SIZE + PIECE_OFFSET_Y
+                piece.x * SQUARE_SIZE + SQUARE_SIZE / 2,
+                piece.y * SQUARE_SIZE + SQUARE_SIZE / 2
             );
         }
     }
