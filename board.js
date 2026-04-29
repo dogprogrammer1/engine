@@ -30,6 +30,20 @@ class Llong {
 }
 
 const EMPTY = -1;
+const WHITE = 0;
+const BLACK = 1;
+
+const PAWN = 0;
+const BISHOP = 1;
+const KNIGHT = 2;
+const ROOK = 3;
+const QUEEN = 4;
+const KING = 5;
+
+const WHITE_KINGSIDE = 0;
+const WHITE_QUEENSIDE = 1;
+const BLACK_KINGSIDE = 2;
+const BLACK_QUEENSIDE = 3;
 
 export default class Board {
     constructor() {
@@ -39,26 +53,26 @@ export default class Board {
     reset() {
         this.board = [
             [
-                new Llong(0x000000000000FF00n),
-                new Llong(0x0000000000000024n),
-                new Llong(0x0000000000000042n),
-                new Llong(0x0000000000000081n),
-                new Llong(0x0000000000000008n),
-                new Llong(0x0000000000000010n)
-            ],
-            [
                 new Llong(0x00FF000000000000n),
                 new Llong(0x2400000000000000n),
                 new Llong(0x4200000000000000n),
                 new Llong(0x8100000000000000n),
                 new Llong(0x0800000000000000n),
                 new Llong(0x1000000000000000n)
+            ],
+            [
+                new Llong(0x000000000000FF00n),
+                new Llong(0x0000000000000024n),
+                new Llong(0x0000000000000042n),
+                new Llong(0x0000000000000081n),
+                new Llong(0x0000000000000008n),
+                new Llong(0x0000000000000010n)
             ]
         ];
 
         this.canCastle = [true, true, true, true];
         this.enPassant = [-1, -1];
-        this.turn = 0; // 0 for white, 1 for black
+        this.turn = WHITE;
 
         this.steps = {
             bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
@@ -69,6 +83,30 @@ export default class Board {
         };
 
         this.rebuildSquares();
+    }
+
+    opponent(color) {
+        return color === WHITE ? BLACK : WHITE;
+    }
+
+    pawnDirection(color) {
+        return color === WHITE ? -1 : 1;
+    }
+
+    pawnStartRank(color) {
+        return color === WHITE ? 6 : 1;
+    }
+
+    homeRank(color) {
+        return color === WHITE ? 7 : 0;
+    }
+
+    castleIndex(color, kingside) {
+        if (color === WHITE) {
+            return kingside ? WHITE_KINGSIDE : WHITE_QUEENSIDE;
+        }
+
+        return kingside ? BLACK_KINGSIDE : BLACK_QUEENSIDE;
     }
 
     inside(x, y) {
@@ -145,7 +183,7 @@ export default class Board {
 
     enemyColor(x, y, color) {
         const code = this.getPieceCode(x, y);
-        return code !== EMPTY && Math.floor(code / 6) === 1 - color;
+        return code !== EMPTY && Math.floor(code / 6) === this.opponent(color);
     }
 
     slideCanReach(x1, y1, x2, y2, dirs) {
@@ -170,23 +208,23 @@ export default class Board {
         const color = piece[0];
         const type = piece[1];
 
-        if (type === 0) {
-            const dir = color === 0 ? 1 : -1;
+        if (type === PAWN) {
+            const dir = this.pawnDirection(color);
             return (
                 (x2 === x1 + 1 && y2 === y1 + dir) ||
                 (x2 === x1 - 1 && y2 === y1 + dir)
             );
         }
 
-        if (type === 1) return this.slideCanReach(x1, y1, x2, y2, this.steps.bishop);
-        if (type === 3) return this.slideCanReach(x1, y1, x2, y2, this.steps.rook);
-        if (type === 4) return this.slideCanReach(x1, y1, x2, y2, this.steps.queen);
+        if (type === BISHOP) return this.slideCanReach(x1, y1, x2, y2, this.steps.bishop);
+        if (type === ROOK) return this.slideCanReach(x1, y1, x2, y2, this.steps.rook);
+        if (type === QUEEN) return this.slideCanReach(x1, y1, x2, y2, this.steps.queen);
 
-        if (type === 2) {
+        if (type === KNIGHT) {
             return this.steps.knight.some(s => x1+s[0]===x2 && y1+s[1]===y2);
         }
 
-        if (type === 5) {
+        if (type === KING) {
             return this.steps.king.some(s => x1+s[0]===x2 && y1+s[1]===y2);
         }
 
@@ -208,7 +246,7 @@ export default class Board {
         for (let y = 0; y < 8; y++) {
             for (let x = 0; x < 8; x++) {
                 const p = this.getPiece(x, y);
-                if (p[0] === 1 - color) {
+                if (p[0] === this.opponent(color)) {
                     if (this.attacksSquare(x, y, kx, ky)) {
                         return true;
                     }
@@ -233,12 +271,7 @@ export default class Board {
     }
 
     canCastleTo(color, x1, y1, x2, y2) { 
-        let homeY;
-        if (color === 0) {
-            homeY = 0;
-        } else {
-            homeY = 7;
-        }
+        const homeY = this.homeRank(color);
         
         if (x1 !== 4 || y1 !== homeY || y2 !== homeY) {
             return false;
@@ -254,21 +287,16 @@ export default class Board {
         
         const kingside = (x2 === 6);
 
-        let castleIndex;
-        if (color === 0) {
-            castleIndex = kingside ? 0 : 1;
-        } else {
-            castleIndex = kingside ? 2 : 3;
-        }
+        const castleIndex = this.castleIndex(color, kingside);
 
         const rookX = kingside ? 7 : 0;
         const rook = this.getPiece(rookX, homeY);
-        const enemy = 1 - color;
+        const enemy = this.opponent(color);
 
         if (!this.canCastle[castleIndex]) {
             return false;
         }
-        if (rook[0] !== color || rook[1] !== 3){
+        if (rook[0] !== color || rook[1] !== ROOK){
             return false;
         }
 
@@ -299,9 +327,9 @@ export default class Board {
         const dx = x2 - x1;
         const dy = y2 - y1;
 
-        if (type === 0) {
-            const dir = color === 0 ? 1 : -1;
-            const start = color === 0 ? 1 : 6;
+        if (type === PAWN) {
+            const dir = this.pawnDirection(color);
+            const start = this.pawnStartRank(color);
 
             if (dx === 0 && dy === dir && !this.occupied(x2, y2)) return true;
 
@@ -326,15 +354,15 @@ export default class Board {
             return false;
         }
 
-        if (type === 1) return this.slideCanReach(x1, y1, x2, y2, this.steps.bishop);
-        if (type === 3) return this.slideCanReach(x1, y1, x2, y2, this.steps.rook);
-        if (type === 4) return this.slideCanReach(x1, y1, x2, y2, this.steps.queen);
+        if (type === BISHOP) return this.slideCanReach(x1, y1, x2, y2, this.steps.bishop);
+        if (type === ROOK) return this.slideCanReach(x1, y1, x2, y2, this.steps.rook);
+        if (type === QUEEN) return this.slideCanReach(x1, y1, x2, y2, this.steps.queen);
 
-        if (type === 2) {
+        if (type === KNIGHT) {
             return this.steps.knight.some(s => dx === s[0] && dy === s[1]);
         }
 
-        if (type === 5) {
+        if (type === KING) {
             if (this.steps.king.some(s => dx === s[0] && dy === s[1])) return true;
 
             if (dy === 0 && Math.abs(dx) === 2) return this.canCastleTo(color, x1, y1, x2, y2);
@@ -347,21 +375,20 @@ export default class Board {
 
     rawMove(x1, y1, x2, y2) {
         const [color, type] = this.getPiece(x1, y1);
-        const enemy = 1 - color;
-        console.log(x1, y1, x2, y2, color, type);
+        const enemy = this.opponent(color);
         const target = this.getPiece(x2, y2);
         if (target[1] !== -1) {
             this.board[target[0]][target[1]].clear(x2, y2);
         }
 
         if (
-            type === 0 &&
+            type === PAWN &&
             x2 === this.enPassant[0] &&
             y2 === this.enPassant[1] &&
             !this.occupied(x2, y2)
         ) {
-            const capY = color === 0 ? y2 - 1 : y2 + 1;
-            this.board[enemy][0].clear(x2, capY);
+            const capY = color === WHITE ? y2 + 1 : y2 - 1;
+            this.board[enemy][PAWN].clear(x2, capY);
             this.setPieceCode(x2, capY, EMPTY);
         }
 
@@ -369,55 +396,51 @@ export default class Board {
         this.setPieceCode(x1, y1, EMPTY);
         this.setPieceCode(x2, y2, color * 6 + type);
 
-        if (type === 5 && Math.abs(x2 - x1) === 2) {
+        if (type === KING && Math.abs(x2 - x1) === 2) {
             if (x2 === 6) {
                 // Kingside castling: rook h-file to f-file
-                this.board[color][3].move(7, y1, 5, y1);
+                this.board[color][ROOK].move(7, y1, 5, y1);
                 this.setPieceCode(7, y1, EMPTY);
-                this.setPieceCode(5, y1, color * 6 + 3);
-                // Clear rook's castling rights for this side
-                if (color === 0) this.canCastle[0] = false;
-                else this.canCastle[2] = false;
+                this.setPieceCode(5, y1, color * 6 + ROOK);
+                this.canCastle[this.castleIndex(color, true)] = false;
             } else {
                 // Queenside castling: rook a-file to d-file
-                this.board[color][3].move(0, y1, 3, y1);
+                this.board[color][ROOK].move(0, y1, 3, y1);
                 this.setPieceCode(0, y1, EMPTY);
-                this.setPieceCode(3, y1, color * 6 + 3);
-                // Clear rook's castling rights for this side
-                if (color === 0) this.canCastle[1] = false;
-                else this.canCastle[3] = false;
+                this.setPieceCode(3, y1, color * 6 + ROOK);
+                this.canCastle[this.castleIndex(color, false)] = false;
             }
         }
 
-        if (type === 0 && (y2 === 7 || y2 === 0)) {
-            this.board[color][0].clear(x2, y2);
-            this.board[color][4].set(x2, y2);
-            this.setPieceCode(x2, y2, color * 6 + 4);
+        if (type === PAWN && (y2 === 7 || y2 === 0)) {
+            this.board[color][PAWN].clear(x2, y2);
+            this.board[color][QUEEN].set(x2, y2);
+            this.setPieceCode(x2, y2, color * 6 + QUEEN);
         }
 
         this.enPassant = [-1, -1];
 
-        if (type === 0 && Math.abs(y2 - y1) === 2) {
+        if (type === PAWN && Math.abs(y2 - y1) === 2) {
             this.enPassant = [x1, (y1 + y2) / 2];
         }
 
-        if (type === 5) {
-            if (color === 0) this.canCastle[0] = this.canCastle[1] = false;
-            else this.canCastle[2] = this.canCastle[3] = false;
+        if (type === KING) {
+            this.canCastle[this.castleIndex(color, true)] = false;
+            this.canCastle[this.castleIndex(color, false)] = false;
         }
 
-        if (type === 3) {
-            if (color === 0 && x1 === 0 && y1 === 0) this.canCastle[1] = false;
-            if (color === 0 && x1 === 7 && y1 === 0) this.canCastle[0] = false;
-            if (color === 1 && x1 === 0 && y1 === 7) this.canCastle[3] = false;
-            if (color === 1 && x1 === 7 && y1 === 7) this.canCastle[2] = false;
+        if (type === ROOK) {
+            if (color === WHITE && x1 === 0 && y1 === 7) this.canCastle[WHITE_QUEENSIDE] = false;
+            if (color === WHITE && x1 === 7 && y1 === 7) this.canCastle[WHITE_KINGSIDE] = false;
+            if (color === BLACK && x1 === 0 && y1 === 0) this.canCastle[BLACK_QUEENSIDE] = false;
+            if (color === BLACK && x1 === 7 && y1 === 0) this.canCastle[BLACK_KINGSIDE] = false;
         }
 
-        if (target[1] === 3) {
-            if (target[0] === 0 && x2 === 0 && y2 === 0) this.canCastle[1] = false;
-            if (target[0] === 0 && x2 === 7 && y2 === 0) this.canCastle[0] = false;
-            if (target[0] === 1 && x2 === 0 && y2 === 7) this.canCastle[3] = false;
-            if (target[0] === 1 && x2 === 7 && y2 === 7) this.canCastle[2] = false;
+        if (target[1] === ROOK) {
+            if (target[0] === WHITE && x2 === 0 && y2 === 7) this.canCastle[WHITE_QUEENSIDE] = false;
+            if (target[0] === WHITE && x2 === 7 && y2 === 7) this.canCastle[WHITE_KINGSIDE] = false;
+            if (target[0] === BLACK && x2 === 0 && y2 === 0) this.canCastle[BLACK_QUEENSIDE] = false;
+            if (target[0] === BLACK && x2 === 7 && y2 === 0) this.canCastle[BLACK_KINGSIDE] = false;
         }
     }
 
@@ -524,7 +547,7 @@ export default class Board {
                 }
 
                 const piece = pieceChars[type];
-                rank += color === 1 ? piece.toUpperCase() : piece;
+                rank += color === WHITE ? piece.toUpperCase() : piece;
             }
 
             if (empty > 0) {
@@ -554,7 +577,7 @@ export default class Board {
             ? "-"
             : this.squareName(this.enPassant[0], this.enPassant[1]);
         
-        return `${ranks.join("/")} ${this.turn === 1 ? "w" : "b"} ${castling} ${enPassant} 0 1`;
+        return `${ranks.join("/")} ${this.turn === WHITE ? "w" : "b"} ${castling} ${enPassant} 0 1`;
     }
 
     move(x1, y1, x2, y2) {
@@ -563,7 +586,6 @@ export default class Board {
         this.rawMove(x1, y1, x2, y2);
         this.rebuildSquares();
         this.turn = 1 - this.turn;
-        console.log(x1, y1, x2, y2);
         return true;
 
     }
