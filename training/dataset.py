@@ -1,47 +1,50 @@
 import math
-import pandas as pd
+
 import numpy as np
-import torch 
+import pandas as pd
+import torch
 from torch.utils.data import Dataset
+
 from fen_helpers import encode_fen
 
 
 def eval_to_target(cp, mate):
     if pd.notna(mate):
-        if (float) > 0:
-            return 1.0
-        else:
-            return -1.0 
+        return 1.0 if float(mate) > 0 else -1.0
 
     if pd.isna(cp):
         return 0.0
 
-    # tanh is the hyperbolic tan function, maps centipawns to -1 to 1
-    return math.tanh(float(cp) / 400)
+    return math.tanh(float(cp) / 400.0)
 
-def load_rows(path, limit = 100_000, min_depth = 25, columns=["FEN", "EvalCp", "EvalMate", "Depth"]):
+
+def load_rows(path, limit=100_000, min_depth=25, columns=None):
+    if columns is None:
+        columns = ["fen", "depth", "cp", "mate"]
+
     df = pd.read_parquet(path, columns=columns)
-    df = df[df["Depth"] >= min_depth]
+    df = df[df["depth"] >= min_depth]
 
-    df = df.head(limit)
-    
-    df = df.copy() # cause pandas is anoying ahhh
+    if limit is not None:
+        df = df.head(limit)
 
+    df = df.copy()
     df["target"] = [
         eval_to_target(cp, mate)
-        for cp, mate in zip(df["EvalCp"], df["EvalMate"])
+        for cp, mate in zip(df["cp"], df["mate"])
     ]
 
     return df
 
+
 class ChessDataset(Dataset):
     def __init__(self, df):
-        self.fens = df["FEN"].tolist()
-        self.targets = df["target"].tolist()
-    
+        self.fens = df["fen"].tolist()
+        self.targets = df["target"].to_numpy(dtype=np.float32)
+
     def __len__(self):
         return len(self.fens)
-    
+
     def __getitem__(self, idx):
         model_input = torch.from_numpy(encode_fen(self.fens[idx]))
         target = torch.tensor(self.targets[idx], dtype=torch.float32)

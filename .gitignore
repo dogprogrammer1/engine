@@ -3,3 +3,9 @@ node_modules/
 
 training/datasets/
 training/models/
+
+data/
+
+__pycache__/
+*.pyc
+*.log
