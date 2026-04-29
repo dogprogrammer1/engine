@@ -4,9 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Chess Engine</title>
+    <style>
+        body {
+            margin: 0;
+            display: grid;
+            place-items: center;
+            min-height: 100vh;
+            background: #111;
+        }
+
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-    <canvas id="canvas"></canvas>
-    <script type="module" src="/main.js"></script>
+    <canvas id="canvas" aria-label="Chess board"></canvas>
+    <script type="module">
+        import Game from "./game.js";
+        import Renderer from "./renderer/renderer.js";
+        import { BOARD_SIZE, SQUARE_SIZE } from "./ui-constants.js";
+
+        const canvas = document.getElementById("canvas");
+        const renderer = new Renderer(canvas);
+        const game = new Game(renderer);
+
+        canvas.addEventListener("click", (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = Math.floor(((event.clientX - rect.left) * scaleX) / SQUARE_SIZE);
+            const y = Math.floor(((event.clientY - rect.top) * scaleY) / SQUARE_SIZE);
+
+            if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+                game.click(x, y);
+            }
+        });
+
+        game.draw();
+    </script>
 </body>
 </html>

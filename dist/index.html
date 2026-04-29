@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Chess Engine</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #f2f2f2;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background:
+                radial-gradient(circle at top, #2b2b2b 0%, #151515 45%, #0b0b0b 100%);
+        }
+
+        main {
+            display: grid;
+            gap: 12px;
+            justify-items: center;
+            padding: 24px;
+        }
+
+        h1,
+        p {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+            width: min(90vw, 480px);
+            height: min(90vw, 480px);
+            border: 2px solid #2c2c2c;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .hint {
+            color: #b9b9b9;
+            font-size: 14px;
+        }
+    </style>
+  <script type="module" crossorigin src="/assets/index-D4LU7_2o.js"></script>
+</head>
+<body>
+    <main>
+        <h1>Chess Board</h1>
+        <canvas id="canvas" aria-label="Chess board"></canvas>
+        <p class="hint">Click a piece, then click a square to move it.</p>
+    </main>
+</body>
+</html>
