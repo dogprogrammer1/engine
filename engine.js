@@ -211,9 +211,9 @@ export default class Engine {
         // Material evaluation and collect piece info
         for (const piece of pieces) {
             let val = pieceValues[piece.type] || 0;
+            totalMaterial += val;
             if (piece.color === 0) {
                 score += val;
-                totalMaterial += val;
                 if (piece.type === 0) whitePawns.push(piece);
                 else if (piece.type === 5) whiteKing = piece;
             } else {
@@ -224,8 +224,8 @@ export default class Engine {
         }
 
         // Determine game phase
-        const isEndgame = totalMaterial < 1500; // Endgame threshold
-        const isMiddlegame = totalMaterial > 2000;
+        const isEndgame = totalMaterial < 2600;
+        const isMiddlegame = totalMaterial > 5200;
 
         // PST eval
         for (const piece of pieces) {
@@ -244,9 +244,9 @@ export default class Engine {
             const pstValue = pst[row][piece.x];
             
             if (piece.color === 0) {
-                score += pstValue / 10;
+                score += pstValue;
             } else {
-                score -= pstValue / 10;
+                score -= pstValue;
             }
         }
 
@@ -258,9 +258,11 @@ export default class Engine {
         const kingSafetyScore = this.evaluateKingSafety(pieces, whiteKing, blackKing, isMiddlegame);
         score += kingSafetyScore;
 
+        score += this.evaluateDevelopment(pieces, whiteKing, blackKing, isMiddlegame);
+
         // Cheap pseudo-mobility. Full legal move generation here makes every
         // leaf evaluation extremely expensive during search.
-        score += this.evaluateMobility(pieces) * 0.15;
+        score += this.evaluateMobility(pieces) * 2;
 
         return score / 100; // Normalize the score
     }
@@ -274,6 +276,43 @@ export default class Engine {
         }
 
         return score;
+    }
+
+    evaluateDevelopment(pieces, whiteKing, blackKing, isMiddlegame) {
+        if (!isMiddlegame) return 0;
+
+        let score = 0;
+
+        for (const piece of pieces) {
+            if (piece.type !== 1 && piece.type !== 2) continue;
+
+            const homeRank = piece.color === 0 ? 7 : 0;
+            const onStartingSquare = piece.y === homeRank && [1, 2, 5, 6].includes(piece.x);
+            const developmentScore = onStartingSquare ? -12 : 8;
+            score += piece.color === 0 ? developmentScore : -developmentScore;
+        }
+
+        score += this.evaluateOpeningKingPlacement(whiteKing, 0);
+        score -= this.evaluateOpeningKingPlacement(blackKing, 1);
+
+        return score;
+    }
+
+    evaluateOpeningKingPlacement(king, color) {
+        if (!king) return 0;
+
+        const homeRank = color === 0 ? 7 : 0;
+        const isCastled = king.y === homeRank && (king.x === 2 || king.x === 6);
+        const isHome = king.x === 4 && king.y === homeRank;
+        const canStillCastle = (
+            this.board.canCastle[this.board.castleIndex(color, true)] ||
+            this.board.canCastle[this.board.castleIndex(color, false)]
+        );
+
+        if (isCastled) return 50;
+        if (isHome && canStillCastle) return 15;
+        if (isHome) return -20;
+        return -80;
     }
 
     countPieceMobility(piece) {
@@ -485,7 +524,7 @@ export default class Engine {
 
     evaluateKingShelter(king, color, pieceMap) {
         let shelterScore = 0;
-        const direction = color === 0 ? 1 : -1;
+        const direction = color === 0 ? -1 : 1;
 
         // Check for pawns protecting the king
         const shelterPositions = [
