@@ -1,9 +1,10 @@
 import Board from "./board.js";
 export default class Game {
-    constructor(renderer, playerColor = 0) {
+    constructor(renderer, playerColor = 0, evalDisplay = null) {
         this.playerColor = playerColor; // 0 = white, 1 = black
         this.board = new Board(playerColor);
         this.renderer = renderer;
+        this.evalDisplay = evalDisplay;
         this.selected = false;
         this.selX = -1;
         this.selY = -1;
@@ -100,5 +101,14 @@ export default class Game {
 
     draw() {
         this.renderer.draw(this.board, this.selection());
+        this.updateEvalDisplay();
+    }
+
+    updateEvalDisplay() {
+        if (!this.evalDisplay) return;
+
+        const evalScore = this.board.engine.evaluateBoardClassical();
+        const sign = evalScore > 0 ? "+" : "";
+        this.evalDisplay.textContent = `Eval: ${sign}${evalScore.toFixed(2)}`;
     }
 }

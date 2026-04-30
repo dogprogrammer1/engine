@@ -17,10 +17,17 @@
             display: block;
             cursor: pointer;
         }
+
+        #evalDisplay {
+            color: white;
+            font: 12px Arial, sans-serif;
+            margin-top: 6px;
+        }
     </style>
 </head>
 <body>
     <canvas id="canvas" aria-label="Chess board"></canvas>
+    <div id="evalDisplay" aria-live="polite">Eval: 0.00</div>
     <select id = "colorSelect" aria-label="Select player color">
         <option value="white">Play as White</option>
         <option value="black">Play as Black</option>
@@ -34,6 +41,7 @@
         const canvas = document.getElementById("canvas");
         const colorSelect = document.getElementById("colorSelect");
         const newGameBtn = document.getElementById("newGameBtn");
+        const evalDisplay = document.getElementById("evalDisplay");
         const renderer = new Renderer(canvas);
 
         let game;
@@ -41,7 +49,7 @@
         function initializeGame() {
             // Get player color: "white" = 0, "black" = 1
             const playerColor = colorSelect.value === "white" ? 0 : 1;
-            game = new Game(renderer, playerColor);
+            game = new Game(renderer, playerColor, evalDisplay);
             game.draw();
 
             // If engine is white (player is black), make the first move
