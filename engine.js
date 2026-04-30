@@ -258,13 +258,101 @@ export default class Engine {
         const kingSafetyScore = this.evaluateKingSafety(pieces, whiteKing, blackKing, isMiddlegame);
         score += kingSafetyScore;
 
-        // Mobility evaluation with optimized weight - cache move counts
-        let mobility = 0;
-        mobility += this.board.generateLegalMoves(0).length;
-        mobility -= this.board.generateLegalMoves(1).length;
-        score += mobility * 0.15;
+        // Cheap pseudo-mobility. Full legal move generation here makes every
+        // leaf evaluation extremely expensive during search.
+        score += this.evaluateMobility(pieces) * 0.15;
 
         return score / 100; // Normalize the score
+    }
+
+    evaluateMobility(pieces) {
+        let score = 0;
+
+        for (const piece of pieces) {
+            const mobility = this.countPieceMobility(piece);
+            score += piece.color === 0 ? mobility : -mobility;
+        }
+
+        return score;
+    }
+
+    countPieceMobility(piece) {
+        if (piece.type === 0) return this.countPawnMobility(piece);
+
+        if (piece.type === 2) {
+            return this.countStepMobility(piece, this.board.steps.knight);
+        }
+
+        if (piece.type === 5) {
+            return this.countStepMobility(piece, this.board.steps.king);
+        }
+
+        if (piece.type === 1) {
+            return this.countSlidingMobility(piece, this.board.steps.bishop);
+        }
+
+        if (piece.type === 3) {
+            return this.countSlidingMobility(piece, this.board.steps.rook);
+        }
+
+        if (piece.type === 4) {
+            return this.countSlidingMobility(piece, this.board.steps.queen);
+        }
+
+        return 0;
+    }
+
+    countPawnMobility(piece) {
+        const dir = piece.color === 0 ? -1 : 1;
+        let mobility = 0;
+        const oneStepY = piece.y + dir;
+
+        if (this.board.inside(piece.x, oneStepY) && !this.board.occupied(piece.x, oneStepY)) {
+            mobility++;
+        }
+
+        for (const dx of [-1, 1]) {
+            const x = piece.x + dx;
+            const y = piece.y + dir;
+            if (!this.board.inside(x, y)) continue;
+            if (this.board.enemyColor(x, y, piece.color) || (x === this.board.enPassant[0] && y === this.board.enPassant[1])) {
+                mobility++;
+            }
+        }
+
+        return mobility;
+    }
+
+    countStepMobility(piece, steps) {
+        let mobility = 0;
+
+        for (const [dx, dy] of steps) {
+            const x = piece.x + dx;
+            const y = piece.y + dy;
+            if (!this.board.inside(x, y) || this.board.sameColor(x, y, piece.color)) continue;
+            mobility++;
+        }
+
+        return mobility;
+    }
+
+    countSlidingMobility(piece, directions) {
+        let mobility = 0;
+
+        for (const [dx, dy] of directions) {
+            let x = piece.x + dx;
+            let y = piece.y + dy;
+
+            while (this.board.inside(x, y)) {
+                if (this.board.sameColor(x, y, piece.color)) break;
+                mobility++;
+                if (this.board.enemyColor(x, y, piece.color)) break;
+                x += dx;
+                y += dy;
+            }
+        }
+
+        return mobility;
     }
 
     evaluatePawnStructure(whitePawns, blackPawns) {
@@ -463,11 +551,10 @@ export default class Engine {
                 this.board.turn = 1 - this.board.turn;
                 
                 // Evaluate with minimax
-                const score = this.minimax(currentDepth - 1, -Infinity, Infinity, this.color === 0);
+                const score = this.minimax(currentDepth - 1, -Infinity, Infinity);
                 
                 // Restore board state
                 this.board.restoreState(boardState);
-                this.board.turn = 1 - this.board.turn;
                 
                 // Update best move
                 if (this.color === 0) {
@@ -530,7 +617,8 @@ export default class Engine {
         }
     }
 
-    minimax(depth, alpha, beta, maximizingPlayer) {
+    minimax(depth, alpha, beta) {
+        const maximizingPlayer = this.board.turn === 0;
         this.nodesEvaluated++;
         // Get zobrist hash for transposition table lookup
         const zobristHash = this.calculateZobristHash();
@@ -546,7 +634,7 @@ export default class Engine {
         
         // Use quiescence search at leaf nodes for better tactical evaluation
         if (depth === 0) {
-            return this.quiescenceSearch(alpha, beta, maximizingPlayer);
+            return this.quiescenceSearch(alpha, beta);
         }
         
         // Generate legal moves
@@ -569,6 +657,7 @@ export default class Engine {
         let value;
         let bestMove = null;
         const alphaOrig = alpha;
+        const betaOrig = beta;
         
         // Sort moves with improved heuristic
         this.orderMoves(moves);
@@ -584,11 +673,10 @@ export default class Engine {
                 this.board.turn = 1 - this.board.turn;
                 
                 // Recursive minimax call
-                const childValue = this.minimax(depth - 1, alpha, beta, false);
+                const childValue = this.minimax(depth - 1, alpha, beta);
                 
                 // Restore board
                 this.board.restoreState(boardState);
-                this.board.turn = 1 - this.board.turn;
                 
                 if (childValue > value) {
                     value = childValue;
@@ -609,11 +697,10 @@ export default class Engine {
                 this.board.turn = 1 - this.board.turn;
                 
                 // Recursive minimax call
-                const childValue = this.minimax(depth - 1, alpha, beta, true);
+                const childValue = this.minimax(depth - 1, alpha, beta);
                 
                 // Restore board
                 this.board.restoreState(boardState);
-                this.board.turn = 1 - this.board.turn;
                 
                 if (childValue < value) {
                     value = childValue;
@@ -628,7 +715,7 @@ export default class Engine {
         // Store in transposition table
         let flag = 0;
         if (value <= alphaOrig) flag = 2; // Upper bound
-        else if (value >= beta) flag = 1; // Lower bound
+        else if (value >= betaOrig) flag = 1; // Lower bound
         else flag = 0; // Exact
         
         this.storeTransposition(zobristHash, depth, value, flag, bestMove);
@@ -637,8 +724,10 @@ export default class Engine {
     }
 
     // Quiescence search for tactical positions (handles captures and checks)
-    quiescenceSearch(alpha, beta, maximizingPlayer) {
+    quiescenceSearch(alpha, beta, depthRemaining = 4) {
+        const maximizingPlayer = this.board.turn === 0;
         const standPat = this.evaluateBoardClassical();
+        if (depthRemaining <= 0) return standPat;
         
         if (maximizingPlayer) {
             if (standPat >= beta) return beta;
@@ -653,18 +742,7 @@ export default class Engine {
             beta = Math.min(beta, standPat);
         }
         
-        // Generate only capturing moves for deeper analysis (avoid generating all moves)
-        const allMoves = this.board.generateLegalMoves(this.board.turn);
-        
-        // Filter for captures more efficiently
-        const tacticalMoves = [];
-        for (let i = 0; i < allMoves.length; i++) {
-            const move = allMoves[i];
-            const target = this.board.getPiece(move.x2, move.y2);
-            if (target[1] !== -1) { // Only captures
-                tacticalMoves.push(move);
-            }
-        }
+        const tacticalMoves = this.generateCaptureMoves(this.board.turn);
         
         if (tacticalMoves.length === 0) {
             return standPat;
@@ -690,10 +768,9 @@ export default class Engine {
                 this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
                 this.board.turn = 1 - this.board.turn;
                 
-                const childValue = this.quiescenceSearch(alpha, beta, false);
+                const childValue = this.quiescenceSearch(alpha, beta, depthRemaining - 1);
                 
                 this.board.restoreState(boardState);
-                this.board.turn = 1 - this.board.turn;
                 
                 value = Math.max(value, childValue);
                 alpha = Math.max(alpha, value);
@@ -708,10 +785,9 @@ export default class Engine {
                 this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
                 this.board.turn = 1 - this.board.turn;
                 
-                const childValue = this.quiescenceSearch(alpha, beta, true);
+                const childValue = this.quiescenceSearch(alpha, beta, depthRemaining - 1);
                 
                 this.board.restoreState(boardState);
-                this.board.turn = 1 - this.board.turn;
                 
                 value = Math.min(value, childValue);
                 beta = Math.min(beta, value);
@@ -719,6 +795,53 @@ export default class Engine {
             }
             return value;
         }
+    }
+
+    generateCaptureMoves(color) {
+        const moves = [];
+        const pieces = this.board.getPieces();
+        const ownPieces = [];
+        const enemyPieces = [];
+        const originalTurn = this.board.turn;
+
+        for (const piece of pieces) {
+            if (piece.color === color) {
+                ownPieces.push(piece);
+            } else {
+                enemyPieces.push(piece);
+            }
+        }
+
+        this.board.turn = color;
+
+        for (const piece of ownPieces) {
+            for (const target of enemyPieces) {
+                const move = { x1: piece.x, y1: piece.y, x2: target.x, y2: target.y };
+                if (this.board.canGetTo(move.x1, move.y1, move.x2, move.y2) && this.isMoveKingSafe(move, color)) {
+                    moves.push(move);
+                }
+            }
+
+            if (piece.type === 0 && this.board.enPassant[0] !== -1) {
+                const move = { x1: piece.x, y1: piece.y, x2: this.board.enPassant[0], y2: this.board.enPassant[1] };
+                if (this.board.canGetTo(move.x1, move.y1, move.x2, move.y2) && this.isMoveKingSafe(move, color)) {
+                    moves.push(move);
+                }
+            }
+        }
+
+        this.board.turn = originalTurn;
+        return moves;
+    }
+
+    isMoveKingSafe(move, color) {
+        const boardState = this.board.cloneState();
+
+        this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+        const isSafe = !this.board.inCheck(color);
+
+        this.board.restoreState(boardState);
+        return isSafe;
     }
 
     // Improved move ordering with MVV-LVA and killer moves
