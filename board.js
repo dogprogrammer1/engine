@@ -47,7 +47,8 @@ const BLACK_KINGSIDE = 2;
 const BLACK_QUEENSIDE = 3;
 
 export default class Board {
-    constructor() {
+    constructor(color) {
+        this.playerColor = color;
         this.reset();
     }
 
@@ -634,13 +635,11 @@ export default class Board {
             console.log(this.gameResult);
         }
         
-        // Update engine's board reference
-        this.engine.updateBoard(this);
+        // Update engine's board reference and color
+        this.engine.board = this;
+        this.engine.color = this.turn;
         
-        // Evaluate board position
-        const evaluation = this.engine.evaluateBoardClassical();
-        console.log(`Board evaluation: ${evaluation.toFixed(2)} (${this.turn === WHITE ? 'White' : 'Black'} to move)`);
-        
+    
         return true;
 
     }

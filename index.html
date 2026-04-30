@@ -21,6 +21,11 @@
 </head>
 <body>
     <canvas id="canvas" aria-label="Chess board"></canvas>
+    <select id = "colorSelect" aria-label="Select player color">
+        <option value="white">Play as White</option>
+        <option value="black">Play as Black</option>
+    </select>
+    <button id="newGameBtn" aria-label="Start a new game">Reset Game</button>
     <script type="module">
         import Game from "./game.js";
         import Renderer from "./renderer/2drenderer.js";

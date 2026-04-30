@@ -1,7 +1,8 @@
 import Board from "./board.js";
 export default class Game {
-    constructor(renderer) {
-        this.board = new Board();
+    constructor(renderer, color) {
+        this.color = color;
+        this.board = new Board(color);
         this.renderer = renderer;
         this.selected = false;
         this.selX = -1;
