@@ -23,8 +23,15 @@ export default class Game {
                 this.selY = y;
             }
         } else {
-            if (this.board.move(this.selX, this.selY, x, y)) {
-                this.selected = false;
+            const clickedPiece = this.board.getPiece(x, y);
+
+            if (x === this.selX && y === this.selY) {
+                this.clearSelection();
+            } else if (clickedPiece[0] === this.playerColor) {
+                this.selX = x;
+                this.selY = y;
+            } else if (this.board.move(this.selX, this.selY, x, y)) {
+                this.clearSelection();
                 this.draw();
                 
                 // Check if game is over
@@ -42,6 +49,12 @@ export default class Game {
         }
 
         this.draw();
+    }
+
+    clearSelection() {
+        this.selected = false;
+        this.selX = -1;
+        this.selY = -1;
     }
 
     makeEngineMove() {
