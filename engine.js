@@ -6,8 +6,6 @@ export default class Engine {
         this.zobristTable = this.initializeZobristTable();
         this.killerMoves = []; // Killer moves for move ordering
         this.nodesEvaluated = 0;
-        this.searchStartTime = 0;
-        this.maxSearchTime = 3000; // milliseconds
     }
 
     // Initialize Zobrist hashing - minimal memory usage with 64-bit hashes
@@ -192,7 +190,7 @@ export default class Engine {
         const isEndgame = totalMaterial < 1500; // Endgame threshold
         const isMiddlegame = totalMaterial > 2000;
 
-        // Piece square table evaluation
+        // PST eval
         for (const piece of pieces) {
             let tableIndex = piece.type;
             
@@ -262,7 +260,6 @@ export default class Engine {
             }
         }
 
-        // Analyze black pawns
         for (const pawn of blackPawns) {
             // Check for doubled pawns
             const doubledCount = blackPawns.filter(p => p.x === pawn.x).length;
@@ -375,10 +372,9 @@ export default class Engine {
         const MAXDEPTH = 10;
         if(depth > MAXDEPTH) depth = MAXDEPTH;
         
-        this.searchStartTime = Date.now();
         this.nodesEvaluated = 0;
         
-        // Clear transposition table periodically to manage memory
+        // Clear transposition table
         if (this.transpositionTable.size > 100000) {
             this.clearTranspositionTable();
         }
@@ -386,19 +382,15 @@ export default class Engine {
         const moves = this.board.generateLegalMoves(this.color);
         if (moves.length === 0) return null;
         
-        // Initialize killer moves table
+        // killer moves = best current at each depth :)
         this.killerMoves = Array(depth + 1).fill(null).map(() => []);
         
         let bestMove = moves[0];
         let bestScore = this.color === 0 ? -Infinity : Infinity;
         let previousIterationMoves = [];
 
-        // Iterative deepening with move ordering from previous iteration
+        //iteration
         for (let currentDepth = 1; currentDepth <= depth; currentDepth++) {
-            // Stop if time limit exceeded
-            if (Date.now() - this.searchStartTime > this.maxSearchTime) {
-                break;
-            }
             
             let tempBestScore = this.color === 0 ? -Infinity : Infinity;
             let tempBestMove = moves[0];
@@ -478,12 +470,7 @@ export default class Engine {
     }
 
     minimax(depth, alpha, beta, maximizingPlayer) {
-        // Check time limit periodically
         this.nodesEvaluated++;
-        if ((this.nodesEvaluated & 0xFF) === 0 && Date.now() - this.searchStartTime > this.maxSearchTime) {
-            return this.evaluateBoardClassical();
-        }
-        
         // Get zobrist hash for transposition table lookup
         const zobristHash = this.calculateZobristHash();
         

@@ -32,9 +32,40 @@
         import { BOARD_SIZE, SQUARE_SIZE } from "./ui-constants.js";
 
         const canvas = document.getElementById("canvas");
+        const colorSelect = document.getElementById("colorSelect");
+        const newGameBtn = document.getElementById("newGameBtn");
         const renderer = new Renderer(canvas);
-        const game = new Game(renderer);
 
+        let game;
+
+        function initializeGame() {
+            // Get player color: "white" = 0, "black" = 1
+            const playerColor = colorSelect.value === "white" ? 0 : 1;
+            game = new Game(renderer, playerColor);
+            game.draw();
+
+            // If engine is white (player is black), make the first move
+            if (playerColor === 1) {
+                setTimeout(() => {
+                    game.makeEngineMove();
+                }, 500);
+            }
+        }
+
+        // Initialize game on load
+        initializeGame();
+
+        // Handle color selection change
+        colorSelect.addEventListener("change", () => {
+            initializeGame();
+        });
+
+        // Handle new game button
+        newGameBtn.addEventListener("click", () => {
+            initializeGame();
+        });
+
+        // Handle canvas clicks
         canvas.addEventListener("click", (event) => {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -46,8 +77,6 @@
                 game.click(x, y);
             }
         });
-
-        game.draw();
     </script>
 </body>
 </html>

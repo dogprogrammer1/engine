@@ -1,24 +1,75 @@
 import Board from "./board.js";
 export default class Game {
-    constructor(renderer, color) {
-        this.color = color;
-        this.board = new Board(color);
+    constructor(renderer, playerColor = 0) {
+        this.playerColor = playerColor; // 0 = white, 1 = black
+        this.board = new Board(playerColor);
         this.renderer = renderer;
         this.selected = false;
         this.selX = -1;
         this.selY = -1;
+        this.engineThinking = false;
     }
 
     click(x, y) {
-        if(!this.selected){
-            if(this.board.getPiece(x,y)[1] !== -1){
+        // Don't allow clicks during engine move or if not player's turn
+        if (this.engineThinking || this.board.turn !== this.playerColor) {
+            return;
+        }
+
+        if (!this.selected) {
+            if (this.board.getPiece(x, y)[1] !== -1 && this.board.getPiece(x, y)[0] === this.playerColor) {
                 this.selected = true;
                 this.selX = x;
                 this.selY = y;
             }
-        }else{
-            this.board.move(this.selX, this.selY, x, y);
-            this.selected = false;
+        } else {
+            if (this.board.move(this.selX, this.selY, x, y)) {
+                this.selected = false;
+                this.draw();
+                
+                // Check if game is over
+                if (this.board.gameResult?.over) {
+                    console.log("Game over:", this.board.gameResult);
+                    return;
+                }
+
+                // If it's now the engine's turn, make a move after a delay
+                if (this.board.turn !== this.playerColor) {
+                    this.engineThinking = true;
+                    setTimeout(() => this.makeEngineMove(), 500);
+                }
+            }
+        }
+
+        this.draw();
+    }
+
+    makeEngineMove() {
+        const depth = 3; // Engine search depth
+        const bestMove = this.board.engine.findBestMove(depth);
+
+        if (bestMove) {
+            console.log(`Engine move: (${bestMove.x1},${bestMove.y1}) -> (${bestMove.x2},${bestMove.y2})`);
+            this.board.move(bestMove.x1, bestMove.y1, bestMove.x2, bestMove.y2);
+            
+            // Check if game is over
+            if (this.board.gameResult?.over) {
+                console.log("Game over:", this.board.gameResult);
+                this.engineThinking = false;
+                this.draw();
+                return;
+            }
+
+            // If it's player's turn again, allow clicks
+            if (this.board.turn === this.playerColor) {
+                this.engineThinking = false;
+            } else {
+                // Engine has another move in some edge case
+                setTimeout(() => this.makeEngineMove(), 500);
+            }
+        } else {
+            console.log("No legal moves available");
+            this.engineThinking = false;
         }
 
         this.draw();

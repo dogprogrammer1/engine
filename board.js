@@ -639,7 +639,6 @@ export default class Board {
         this.engine.board = this;
         this.engine.color = this.turn;
         
-    
         return true;
 
     }
