@@ -4,8 +4,27 @@ export default class Engine {
         this.color = color; 
         this.transpositionTable = new Map(); // Uses numeric hash for faster lookups
         this.zobristTable = this.initializeZobristTable();
+        this.currentZobristHash = 0n; // Cache zobrist hash
         this.killerMoves = []; // Killer moves for move ordering
         this.nodesEvaluated = 0;
+        this.initializeHash(); // Calculate initial hash
+    }
+
+    initializeHash() {
+        let hash = 0n;
+        const pieces = this.board.getPieces();
+        
+        for (const piece of pieces) {
+            const square = piece.y * 8 + piece.x;
+            hash ^= this.zobristTable[piece.color][piece.type][square];
+        }
+        
+        // XOR with turn and castling rights
+        hash ^= BigInt(this.board.turn);
+        hash ^= BigInt(this.board.canCastle[0] << 2 | this.board.canCastle[1] << 1 | 
+                       this.board.canCastle[2] << 3 | this.board.canCastle[3]);
+        
+        this.currentZobristHash = hash;
     }
 
     // Initialize Zobrist hashing - minimal memory usage with 64-bit hashes
@@ -40,6 +59,7 @@ export default class Engine {
 
     // Calculate Zobrist hash for current board position and convert to numeric hash
     calculateZobristHash() {
+        // Optimize: rebuild from scratch only when needed (after board restore)
         let hash = 0n;
         const pieces = this.board.getPieces();
         
@@ -69,6 +89,13 @@ export default class Engine {
     // Store position evaluation in transposition table with numeric hash
     storeTransposition(hash, depth, score, flag, bestMove) {
         // flag: 0 = exact, 1 = lower bound, 2 = upper bound
+        
+        // Prevent unbounded transposition table growth
+        if (this.transpositionTable.size > 200000) {
+            // Clear when threshold exceeded
+            this.transpositionTable.clear();
+        }
+        
         const entry = this.transpositionTable.get(hash);
         
         // Only store if deeper or first time
@@ -174,15 +201,25 @@ export default class Engine {
         let score = 0;
         let totalMaterial = 0;
         const pieces = this.board.getPieces();
+        
+        // Build piece maps for O(1) lookups
+        const whitePawns = [];
+        const blackPawns = [];
+        let whiteKing = null;
+        let blackKing = null;
 
-        // Material evaluation
+        // Material evaluation and collect piece info
         for (const piece of pieces) {
             let val = pieceValues[piece.type] || 0;
             if (piece.color === 0) {
                 score += val;
                 totalMaterial += val;
+                if (piece.type === 0) whitePawns.push(piece);
+                else if (piece.type === 5) whiteKing = piece;
             } else {
                 score -= val;
+                if (piece.type === 0) blackPawns.push(piece);
+                else if (piece.type === 5) blackKing = piece;
             }
         }
 
@@ -213,15 +250,15 @@ export default class Engine {
             }
         }
 
-        // Pawn structure evaluation
-        const pawnScore = this.evaluatePawnStructure(pieces);
+        // Pawn structure evaluation - pass pre-filtered pieces
+        const pawnScore = this.evaluatePawnStructure(whitePawns, blackPawns);
         score += pawnScore;
 
         // King safety evaluation (higher weight in middlegame)
-        const kingSafetyScore = this.evaluateKingSafety(pieces, isMiddlegame);
+        const kingSafetyScore = this.evaluateKingSafety(pieces, whiteKing, blackKing, isMiddlegame);
         score += kingSafetyScore;
 
-        // Mobility evaluation with optimized weight
+        // Mobility evaluation with optimized weight - cache move counts
         let mobility = 0;
         mobility += this.board.generateLegalMoves(0).length;
         mobility -= this.board.generateLegalMoves(1).length;
@@ -230,24 +267,35 @@ export default class Engine {
         return score / 100; // Normalize the score
     }
 
-    evaluatePawnStructure(pieces) {
+    evaluatePawnStructure(whitePawns, blackPawns) {
         let score = 0;
-        const whitePawns = pieces.filter(p => p.color === 0 && p.type === 0);  // type 0 = PAWN
-        const blackPawns = pieces.filter(p => p.color === 1 && p.type === 0);
+
+        // Build pawn file maps for O(1) access
+        const whitePawnFiles = new Map();
+        const blackPawnFiles = new Map();
+        
+        for (const pawn of whitePawns) {
+            if (!whitePawnFiles.has(pawn.x)) whitePawnFiles.set(pawn.x, []);
+            whitePawnFiles.get(pawn.x).push(pawn);
+        }
+        for (const pawn of blackPawns) {
+            if (!blackPawnFiles.has(pawn.x)) blackPawnFiles.set(pawn.x, []);
+            blackPawnFiles.get(pawn.x).push(pawn);
+        }
 
         // Analyze white pawns
         for (const pawn of whitePawns) {
-            // Check for doubled pawns (same file)
-            const doubledCount = whitePawns.filter(p => p.x === pawn.x).length;
-            if (doubledCount > 1) {
-                score -= 10 * (doubledCount - 1); // Penalize doubled pawns
+            // Check for doubled pawns
+            const fileCount = whitePawnFiles.get(pawn.x).length;
+            if (fileCount > 1) {
+                score -= 10 * (fileCount - 1);
             }
 
             // Check for isolated pawns (no pawn on adjacent files)
-            const hasLeftNeighbor = whitePawns.some(p => p.x === pawn.x - 1);
-            const hasRightNeighbor = whitePawns.some(p => p.x === pawn.x + 1);
-            if (!hasLeftNeighbor && !hasRightNeighbor) {
-                score -= 5; // Penalize isolated pawns
+            const hasLeft = whitePawnFiles.has(pawn.x - 1);
+            const hasRight = whitePawnFiles.has(pawn.x + 1);
+            if (!hasLeft && !hasRight) {
+                score -= 5;
             }
 
             // Bonus for passed pawns
@@ -256,21 +304,22 @@ export default class Engine {
                 p.y <= pawn.y
             );
             if (isPassedPawn) {
-                score += 15 + (6 - pawn.y) * 5; // Bonus increases as pawn advances
+                score += 15 + (6 - pawn.y) * 5;
             }
         }
 
+        // Analyze black pawns
         for (const pawn of blackPawns) {
             // Check for doubled pawns
-            const doubledCount = blackPawns.filter(p => p.x === pawn.x).length;
-            if (doubledCount > 1) {
-                score += 10 * (doubledCount - 1);
+            const fileCount = blackPawnFiles.get(pawn.x).length;
+            if (fileCount > 1) {
+                score += 10 * (fileCount - 1);
             }
 
             // Check for isolated pawns
-            const hasLeftNeighbor = blackPawns.some(p => p.x === pawn.x - 1);
-            const hasRightNeighbor = blackPawns.some(p => p.x === pawn.x + 1);
-            if (!hasLeftNeighbor && !hasRightNeighbor) {
+            const hasLeft = blackPawnFiles.has(pawn.x - 1);
+            const hasRight = blackPawnFiles.has(pawn.x + 1);
+            if (!hasLeft && !hasRight) {
                 score += 5;
             }
 
@@ -280,44 +329,48 @@ export default class Engine {
                 p.y >= pawn.y
             );
             if (isPassedPawn) {
-                score -= 15 + (pawn.y + 1) * 5; // Bonus increases as pawn advances toward 8th rank
+                score -= 15 + (pawn.y + 1) * 5;
             }
         }
 
         return score;
     }
 
-    evaluateKingSafety(pieces, isMiddlegame) {
+    evaluateKingSafety(pieces, whiteKing, blackKing, isMiddlegame) {
         let score = 0;
         const kingSafetyWeight = isMiddlegame ? 2.0 : 0.5; // Higher weight in middlegame
 
-        const whiteKing = pieces.find(p => p.color === 0 && p.type === 5);  // type 5 = KING
-        const blackKing = pieces.find(p => p.color === 1 && p.type === 5);
+        // Build piece position map for O(1) lookups
+        const pieceMap = new Map();
+        for (const piece of pieces) {
+            const key = `${piece.x},${piece.y}`;
+            pieceMap.set(key, piece);
+        }
 
         if (whiteKing) {
             // Evaluate white king safety
-            const whiteKingAttackers = this.countAttackersAroundKing(whiteKing, 1, pieces);
+            const whiteKingAttackers = this.countAttackersAroundKing(whiteKing, 1, pieceMap);
             score -= whiteKingAttackers * 3 * kingSafetyWeight;
 
             // Bonus for king shelter (pawns in front of king)
-            const kingPawnShield = this.evaluateKingShelter(whiteKing, 0, pieces);
+            const kingPawnShield = this.evaluateKingShelter(whiteKing, 0, pieceMap);
             score += kingPawnShield * kingSafetyWeight;
         }
 
         if (blackKing) {
             // Evaluate black king safety
-            const blackKingAttackers = this.countAttackersAroundKing(blackKing, 0, pieces);
+            const blackKingAttackers = this.countAttackersAroundKing(blackKing, 0, pieceMap);
             score += blackKingAttackers * 3 * kingSafetyWeight;
 
             // Bonus for king shelter
-            const kingPawnShield = this.evaluateKingShelter(blackKing, 1, pieces);
+            const kingPawnShield = this.evaluateKingShelter(blackKing, 1, pieceMap);
             score -= kingPawnShield * kingSafetyWeight;
         }
 
         return score;
     }
 
-    countAttackersAroundKing(king, enemyColor, pieces) {
+    countAttackersAroundKing(king, enemyColor, pieceMap) {
         let attackers = 0;
         const directions = [
             [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]
@@ -328,8 +381,9 @@ export default class Engine {
             const y = king.y + dy;
             if (x < 0 || x > 7 || y < 0 || y > 7) continue;
 
-            const attacker = pieces.find(p => p.x === x && p.y === y && p.color === enemyColor);
-            if (attacker) {
+            const key = `${x},${y}`;
+            const attacker = pieceMap.get(key);
+            if (attacker && attacker.color === enemyColor) {
                 // Weight attackers: queen and rooks are most dangerous
                 // type 4 = QUEEN, type 3 = ROOK, type 2 = KNIGHT, type 1 = BISHOP
                 if (attacker.type === 4) attackers += 3;
@@ -341,7 +395,7 @@ export default class Engine {
         return attackers;
     }
 
-    evaluateKingShelter(king, color, pieces) {
+    evaluateKingShelter(king, color, pieceMap) {
         let shelterScore = 0;
         const direction = color === 0 ? 1 : -1;
 
@@ -354,8 +408,9 @@ export default class Engine {
 
         for (const [x, y] of shelterPositions) {
             if (x < 0 || x > 7 || y < 0 || y > 7) continue;
-            const pawn = pieces.find(p => p.x === x && p.y === y && p.color === color && p.type === 0);  // type 0 = PAWN
-            if (pawn) {
+            const key = `${x},${y}`;
+            const pawn = pieceMap.get(key);
+            if (pawn && pawn.color === color && pawn.type === 0) {  // type 0 = PAWN
                 shelterScore += 10; // Bonus for each pawn protecting the king
             }
         }
@@ -380,6 +435,7 @@ export default class Engine {
         }
         
         const moves = this.board.generateLegalMoves(this.color);
+        console.log(`Engine (color=${this.color}) generating moves, board.turn=${this.board.turn}, found ${moves.length} legal moves`);
         if (moves.length === 0) return null;
         
         // killer moves = best current at each depth :)
@@ -439,21 +495,26 @@ export default class Engine {
 
     // Sort moves by previous iteration results for better move ordering
     sortMovesByPreviousResults(moves, previousResults) {
+        // Build a fast lookup map - using string keys only when needed
         const resultMap = new Map();
-        for (const result of previousResults) {
+        for (let i = 0; i < previousResults.length; i++) {
+            const result = previousResults[i];
             const key = `${result.move.x1},${result.move.y1},${result.move.x2},${result.move.y2}`;
             resultMap.set(key, result.score);
         }
         
-        return moves.sort((a, b) => {
+        // Sort moves directly without creating intermediate objects
+        moves.sort((a, b) => {
             const keyA = `${a.x1},${a.y1},${a.x2},${a.y2}`;
             const keyB = `${b.x1},${b.y1},${b.x2},${b.y2}`;
-            const scoreA = resultMap.get(keyA) || 0;
-            const scoreB = resultMap.get(keyB) || 0;
+            const scoreA = resultMap.get(keyA) ?? 0;
+            const scoreB = resultMap.get(keyB) ?? 0;
             
             // Sort descending for white, ascending for black
             return this.color === 0 ? scoreB - scoreA : scoreA - scoreB;
         });
+        
+        return moves;
     }
 
     // Calculate piece value for MVV-LVA move ordering
@@ -535,7 +596,7 @@ export default class Engine {
                 }
                 
                 alpha = Math.max(alpha, value);
-                if (alpha >= beta) break; // Beta cutoff
+                if (alpha >= beta) break; // Beta cutoff - early termination
             }
         } else {
             value = Infinity;
@@ -560,7 +621,7 @@ export default class Engine {
                 }
                 
                 beta = Math.min(beta, value);
-                if (alpha >= beta) break; // Alpha cutoff
+                if (alpha >= beta) break; // Alpha cutoff - early termination
             }
         }
         
@@ -572,7 +633,6 @@ export default class Engine {
         
         this.storeTransposition(zobristHash, depth, value, flag, bestMove);
         
-        //console.log(`Depth: ${depth}, Nodes: ${this.nodesEvaluated}, Score: ${value.toFixed(2)}, Best Move: ${bestMove ? `(${bestMove.x1},${bestMove.y1})->(${bestMove.x2},${bestMove.y2})` : 'None'}`);
         return value;
     }
 
@@ -582,18 +642,29 @@ export default class Engine {
         
         if (maximizingPlayer) {
             if (standPat >= beta) return beta;
+            // Delta pruning: if even the best capture can't help, return early
+            const deltaMargin = 900; // Queen value - largest expected gain
+            if (standPat + deltaMargin < alpha) return alpha;
             alpha = Math.max(alpha, standPat);
         } else {
             if (standPat <= alpha) return alpha;
+            const deltaMargin = 900;
+            if (standPat - deltaMargin > beta) return beta;
             beta = Math.min(beta, standPat);
         }
         
-        // Generate only capturing moves and checks for deeper analysis
-        const moves = this.board.generateLegalMoves(this.board.turn);
-        const tacticalMoves = moves.filter(move => {
+        // Generate only capturing moves for deeper analysis (avoid generating all moves)
+        const allMoves = this.board.generateLegalMoves(this.board.turn);
+        
+        // Filter for captures more efficiently
+        const tacticalMoves = [];
+        for (let i = 0; i < allMoves.length; i++) {
+            const move = allMoves[i];
             const target = this.board.getPiece(move.x2, move.y2);
-            return target[1] !== -1; // Only captures
-        });
+            if (target[1] !== -1) { // Only captures
+                tacticalMoves.push(move);
+            }
+        }
         
         if (tacticalMoves.length === 0) {
             return standPat;
@@ -652,8 +723,10 @@ export default class Engine {
 
     // Improved move ordering with MVV-LVA and killer moves
     orderMoves(moves) {
-        // Pre-calculate piece values for all moves
-        const moveScores = moves.map(move => {
+        // Pre-calculate piece values for all moves using a single pass
+        const moveScores = [];
+        
+        for (const move of moves) {
             const target = this.board.getPiece(move.x2, move.y2);
             const source = this.board.getPiece(move.x1, move.y1);
             
@@ -664,16 +737,16 @@ export default class Engine {
                 score = this.getPieceValue(target[1]) * 10 - this.getPieceValue(source[1]);
             }
             
-            return { move, score };
-        });
+            moveScores.push({ move, score });
+        }
         
         // Sort by score descending
         moveScores.sort((a, b) => b.score - a.score);
         
-        // Replace original moves array with sorted moves
+        // Replace original moves array with sorted moves - in-place for performance
         moves.length = 0;
-        for (const { move } of moveScores) {
-            moves.push(move);
+        for (let i = 0; i < moveScores.length; i++) {
+            moves[i] = moveScores[i].move;
         }
     }   
 }

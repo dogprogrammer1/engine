@@ -50,7 +50,9 @@ export default class Game {
 
         if (bestMove) {
             console.log(`Engine move: (${bestMove.x1},${bestMove.y1}) -> (${bestMove.x2},${bestMove.y2})`);
-            this.board.move(bestMove.x1, bestMove.y1, bestMove.x2, bestMove.y2);
+            console.log(`Board turn before move: ${this.board.turn}, player color: ${this.playerColor}`);
+            const moveResult = this.board.move(bestMove.x1, bestMove.y1, bestMove.x2, bestMove.y2);
+            console.log(`Move result: ${moveResult}, board turn after: ${this.board.turn}`);
             
             // Check if game is over
             if (this.board.gameResult?.over) {

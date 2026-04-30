@@ -89,8 +89,10 @@ export default class Board {
 
         this.rebuildSquares();
         
-        // Initialize engine for evaluation
-        this.engine = new Engine(this, WHITE);
+        // Initialize engine for evaluation - engine plays the opponent color
+        const engineColor = this.playerColor === WHITE ? BLACK : WHITE;
+        this.engine = new Engine(this, engineColor);
+        console.log(`Board initialized: player color=${this.playerColor}, engine color=${engineColor}`);
     }
 
     opponent(color) {
@@ -622,7 +624,11 @@ export default class Board {
     }
 
     move(x1, y1, x2, y2) {
-        if (!this.isLegalMove(x1, y1, x2, y2)) return false;
+        if (!this.isLegalMove(x1, y1, x2, y2)) {
+            const piece = this.getPiece(x1, y1);
+            console.log(`Move rejected: (${x1},${y1}) -> (${x2},${y2}). Piece at start: [${piece[0]}, ${piece[1]}], turn: ${this.turn}`);
+            return false;
+        }
 
         this.rawMove(x1, y1, x2, y2);
         this.rebuildSquares();
@@ -635,9 +641,8 @@ export default class Board {
             console.log(this.gameResult);
         }
         
-        // Update engine's board reference and color
+        // Update engine's board reference (color should remain the same - the engine's starting color)
         this.engine.board = this;
-        this.engine.color = this.turn;
         
         return true;
 
