@@ -59,7 +59,7 @@ export default class Game {
     }
 
     makeEngineMove() {
-        const depth = 3; // Engine search depth
+        const depth = 4; // Engine search depth
         const bestMove = this.board.engine.findBestMove(depth);
 
         if (bestMove) {
