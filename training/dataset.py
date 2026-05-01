@@ -3,9 +3,10 @@ import math
 import numpy as np
 import pandas as pd
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 
-from fen_helpers import encode_fen
+from fen_helpers import encode_fen, encode_fen_NNUE, NNUE_FEATURES
 
 
 def eval_to_target(cp, mate):
@@ -49,3 +50,29 @@ class ChessDataset(Dataset):
         model_input = torch.from_numpy(encode_fen(self.fens[idx]))
         target = torch.tensor(self.targets[idx], dtype=torch.float32)
         return model_input, target
+
+class NNUEChessDataset (Dataset):
+    def __init__ (self, df):
+        self.fens = df["fen"].tolist()
+        self.targets = df["target"].to_numpy(dtype=np.float32)
+    
+    def __len__(self):
+        return len(self.fens)
+    
+    def __getitem__ (self, idx):
+        features = encode_fen_NNUE(self.fens[idx])
+        us = torch.from_numpy(features["us"]).long()
+        them = torch.from_numpy(features["them"]).long()
+        target = torch.tensor(self.targets[idx], dtype=torch.float32)
+        return us, them, target
+
+# NNUE inputs are weird ah so positions have different encoded lengths
+# so unfortunately have to add padding so everything got same length
+def add_padding(batch):
+    us, them, targets = zip(*batch)
+
+    us = pad_sequence(us, batch_first=True, padding_value=NNUE_FEATURES)
+    them = pad_sequence(them, batch_first=True, padding_value=NNUE_FEATURES)
+    targets = torch.stack(targets)
+
+    return us, them, targets
