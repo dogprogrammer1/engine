@@ -10,11 +10,12 @@ import {
 
 const WHITE = 0;
 
-const LIGHT_SQUARE_COLOR = "#eee";
-const DARK_SQUARE_COLOR = "#057a14";
-const SELECTED_SQUARE_COLOR = "rgb(84, 96, 223)";
-const WHITE_PIECE_COLOR = "#ffd43a";
-const BLACK_PIECE_COLOR = "#222";
+const LIGHT_SQUARE_COLOR = "#f0d9b5";
+const DARK_SQUARE_COLOR = "#b58863";
+const SELECTED_SQUARE_COLOR = "#6fa86f";
+const WHITE_PIECE_COLOR = "#fff8e7";
+const BLACK_PIECE_COLOR = "#1f1f1f";
+const WHITE_PIECE_OUTLINE = "#8a6f4d";
 
 
 export default class Renderer {
@@ -51,9 +52,21 @@ export default class Renderer {
         this.ctx.textBaseline = "middle";
 
         for (const piece of board.getPieces()) {
-            this.ctx.fillStyle = piece.color === WHITE
+            const isWhitePiece = piece.color === WHITE;
+            this.ctx.fillStyle = isWhitePiece
                 ? WHITE_PIECE_COLOR
                 : BLACK_PIECE_COLOR;
+
+            if (isWhitePiece) {
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeStyle = WHITE_PIECE_OUTLINE;
+                this.ctx.strokeText(
+                    PIECE_SYMBOLS[piece.type],
+                    piece.x * SQUARE_SIZE + SQUARE_SIZE / 2,
+                    piece.y * SQUARE_SIZE + SQUARE_SIZE / 2
+                );
+            }
+
             this.ctx.fillText(
                 PIECE_SYMBOLS[piece.type],
                 piece.x * SQUARE_SIZE + SQUARE_SIZE / 2,
