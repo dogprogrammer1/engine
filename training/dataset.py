@@ -6,7 +6,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 
-from fen_helpers import encode_fen, encode_fen_NNUE, NNUE_FEATURES
+from training.fen_helpers import encode_fen, encode_fen_NNUE, NNUE_FEATURES
 
 
 def eval_to_target(cp, mate):
