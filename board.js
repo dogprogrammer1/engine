@@ -88,6 +88,7 @@ export default class Board {
         };
 
         this.rebuildSquares();
+        this.moveHistory = [this.toFEN()];
         
         // Initialize engine for evaluation - engine plays the opponent color
         const engineColor = this.playerColor === WHITE ? BLACK : WHITE;
@@ -681,10 +682,6 @@ export default class Board {
     }
 
     isThreefoldRepetition() {
-        if (this.moveHistory.length < 8) {
-            return false;
-        }
-
         const currentFEN = this.toFEN();
         let count = 0;
 
@@ -698,8 +695,10 @@ export default class Board {
             }
         }
 
-        // Add current position
-        count++;
+        // Add current position once if it isn't already the last history entry
+        if (this.moveHistory.length === 0 || this.moveHistory[this.moveHistory.length - 1].split(' ').slice(0, 4).join(' ') !== currentFEN.split(' ').slice(0, 4).join(' ')) {
+            count++;
+        }
 
         return count >= 3;
     }

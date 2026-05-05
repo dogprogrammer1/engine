@@ -46,34 +46,25 @@ export const evaluationMethods = {
         // Calculate game phase for tapered evaluation
         const phase = this.calculateGamePhase(totalMaterial);
 
-        // PST eval - separate for opening and endgame
+        // PST eval - blend opening and endgame values per piece
         for (const piece of pieces) {
-            let tableIndex = piece.type;
-            
-            // Use endgame king table for endgame evaluation
+            const tableIndex = piece.type;
             const tableIndexEG = piece.type === 5 ? 6 : piece.type;
-            
-            let pstOpening = pieceSquareTables[tableIndex];
-            let pstEndgame = pieceSquareTables[tableIndexEG];
-            
-            // For white: use position as-is, for black: mirror vertically
+            const pstOpening = pieceSquareTables[tableIndex];
+            const pstEndgame = pieceSquareTables[tableIndexEG];
             const row = piece.color === 0 ? piece.y : 7 - piece.y;
-            
-            if (pstOpening) {
-                const pstValue = pstOpening[row][piece.x];
+
+            if (pstOpening && pstEndgame) {
+                const openingValue = pstOpening[row][piece.x];
+                const endgameValue = pstEndgame[row][piece.x];
+                const blendedPstValue = (openingValue * phase) + (endgameValue * (1 - phase));
+
                 if (piece.color === 0) {
-                    openingScore += pstValue;
+                    openingScore += blendedPstValue;
+                    endgameScore += blendedPstValue;
                 } else {
-                    openingScore -= pstValue;
-                }
-            }
-            
-            if (pstEndgame) {
-                const pstValue = pstEndgame[row][piece.x];
-                if (piece.color === 0) {
-                    endgameScore += pstValue;
-                } else {
-                    endgameScore -= pstValue;
+                    openingScore -= blendedPstValue;
+                    endgameScore -= blendedPstValue;
                 }
             }
         }
@@ -138,11 +129,65 @@ export const evaluationMethods = {
         let score = 0;
 
         for (const piece of pieces) {
-            const mobility = this.countPieceMobility(piece);
+            let mobility = this.countPieceMobility(piece);
+
+            if (piece.type === 2 || piece.type === 1) {
+                const safeSquares = this.countSafePieceMobility(piece);
+                if (safeSquares <= 1) {
+                    const distanceFromCenter = Math.max(Math.abs(piece.x - 3.5), Math.abs(piece.y - 3.5));
+                    const trappedPenalty = 20 + Math.max(0, Math.floor((distanceFromCenter - 2.5) * 10));
+                    mobility -= trappedPenalty;
+                }
+            }
+
             score += piece.color === 0 ? mobility : -mobility;
         }
 
         return score;
+    },
+
+    countSafePieceMobility(piece) {
+        if (piece.type === 2) return this.countSafeStepMobility(piece, this.board.steps.knight);
+        if (piece.type === 1) return this.countSafeSlidingMobility(piece, this.board.steps.bishop);
+        return 0;
+    },
+
+    countSafeStepMobility(piece, steps) {
+        let safeMoves = 0;
+        const enemy = this.board.opponent(piece.color);
+
+        for (const [dx, dy] of steps) {
+            const x = piece.x + dx;
+            const y = piece.y + dy;
+            if (!this.board.inside(x, y) || this.board.sameColor(x, y, piece.color)) continue;
+            if (!this.board.squareAttackedBy(x, y, enemy)) {
+                safeMoves++;
+            }
+        }
+
+        return safeMoves;
+    },
+
+    countSafeSlidingMobility(piece, directions) {
+        let safeMoves = 0;
+        const enemy = this.board.opponent(piece.color);
+
+        for (const [dx, dy] of directions) {
+            let x = piece.x + dx;
+            let y = piece.y + dy;
+
+            while (this.board.inside(x, y)) {
+                if (this.board.sameColor(x, y, piece.color)) break;
+                if (!this.board.squareAttackedBy(x, y, enemy)) {
+                    safeMoves++;
+                }
+                if (this.board.enemyColor(x, y, piece.color)) break;
+                x += dx;
+                y += dy;
+            }
+        }
+
+        return safeMoves;
     },
 
     evaluateDevelopment(pieces, whiteKing, blackKing, phase) {
@@ -161,13 +206,13 @@ export const evaluationMethods = {
             score += piece.color === 0 ? developmentScore : -developmentScore;
         }
 
-        score += this.evaluateOpeningKingPlacement(whiteKing, 0) * phase;
-        score -= this.evaluateOpeningKingPlacement(blackKing, 1) * phase;
+        score += this.evaluateOpeningKingPlacement(whiteKing, 0, 1) * phase;
+        score -= this.evaluateOpeningKingPlacement(blackKing, 1, 0) * phase;
 
         return score;
     },
 
-    evaluateOpeningKingPlacement(king, color) {
+    evaluateOpeningKingPlacement(king, color, enemyColor) {
         if (!king) return 0;
 
         const homeRank = color === 0 ? 7 : 0;
@@ -181,7 +226,43 @@ export const evaluationMethods = {
         if (isCastled) return 50;
         if (isHome && canStillCastle) return 15;
         if (isHome) return -20;
+
+        const followUpPressure = this.countKingPressure(king, enemyColor);
+        if (followUpPressure < 2) {
+            return -20;
+        }
+
         return -45;
+    },
+
+    countKingPressure(king, enemyColor) {
+        if (!king) return 0;
+
+        let pressure = 0;
+        const pieces = this.board.getPieces();
+        const adjacentSquares = [
+            [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]
+        ];
+
+        for (const piece of pieces) {
+            if (piece.color !== enemyColor) continue;
+            if (this.board.attacksSquare(piece.x, piece.y, king.x, king.y)) {
+                pressure += piece.type === 4 ? 3 : piece.type === 3 ? 2 : 1;
+                continue;
+            }
+
+            for (const [dx, dy] of adjacentSquares) {
+                const x = king.x + dx;
+                const y = king.y + dy;
+                if (!this.board.inside(x, y)) continue;
+                if (this.board.attacksSquare(piece.x, piece.y, x, y)) {
+                    pressure += 0.5;
+                    break;
+                }
+            }
+        }
+
+        return pressure;
     },
 
     countPieceMobility(piece) {
@@ -279,7 +360,40 @@ export const evaluationMethods = {
             if (!blackPawnFiles.has(pawn.x)) blackPawnFiles.set(pawn.x, []);
             blackPawnFiles.get(pawn.x).push(pawn);
         }
-        
+
+        // Pawn space control: count how many squares on each side are controlled by friendly pawns vs enemy pawns
+        const whitePawnSpace = new Set();
+        const blackPawnSpace = new Set();
+        const whitePawnThreat = new Set();
+        const blackPawnThreat = new Set();
+
+        for (const pawn of whitePawns) {
+            const attackY = pawn.y - 1;
+            for (const dx of [-1, 1]) {
+                const x = pawn.x + dx;
+                if (!this.board.inside(x, attackY)) continue;
+                const key = `${x},${attackY}`;
+                if (attackY >= 4) whitePawnSpace.add(key);
+                if (attackY <= 3) blackPawnThreat.add(key);
+            }
+        }
+
+        for (const pawn of blackPawns) {
+            const attackY = pawn.y + 1;
+            for (const dx of [-1, 1]) {
+                const x = pawn.x + dx;
+                if (!this.board.inside(x, attackY)) continue;
+                const key = `${x},${attackY}`;
+                if (attackY <= 3) blackPawnSpace.add(key);
+                if (attackY >= 4) whitePawnThreat.add(key);
+            }
+        }
+
+        const whiteSpaceScore = (whitePawnSpace.size - whitePawnThreat.size) * 7;
+        const blackSpaceScore = (blackPawnSpace.size - blackPawnThreat.size) * 7;
+        openingScore += whiteSpaceScore - blackSpaceScore;
+        endgameScore += whiteSpaceScore * 0.8 - blackSpaceScore * 0.8;
+
         // if opening, central pawns are more valuable, encourage e4/d4/e5/d5
         if (phase > 0.5) {
             for (const pawn of whitePawns) {
@@ -385,6 +499,7 @@ export const evaluationMethods = {
     evaluateKingSafety(pieces, whiteKing, blackKing, isEndgame) {
         let score = 0;
         const kingSafetyWeight = isEndgame ? 0.5 : 2; // King safety is less critical in endgame, more critical in middlegame
+        const placementWeight = isEndgame ? 0.3 : 1;
 
         // Build piece position map for O(1) lookups
         const pieceMap = new Map();
@@ -412,6 +527,9 @@ export const evaluationMethods = {
             const kingPawnShield = this.evaluateKingShelter(blackKing, 1, pieceMap);
             score -= kingPawnShield * kingSafetyWeight;
         }
+
+        score += this.evaluateOpeningKingPlacement(whiteKing, 0, 1) * placementWeight;
+        score -= this.evaluateOpeningKingPlacement(blackKing, 1, 0) * placementWeight;
 
         return score;
     },
