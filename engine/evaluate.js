@@ -13,59 +13,40 @@ export const evaluationMethods = {
         return (totalMaterial - minMaterial) / (maxMaterial - minMaterial);
     },
 
-    evaluateBoardClassical(){
-        
+    evaluateBoardClassical() {
         let openingScore = 0;
         let endgameScore = 0;
-        let totalMaterial = 0;
         const pieces = this.board.getPieces();
-        
-        // Build piece maps for O(1) lookups
         const whitePawns = [];
         const blackPawns = [];
         let whiteKing = null;
         let blackKing = null;
 
-        // Material evaluation and collect piece info
-        for (const piece of pieces) {
-            let val = pieceValues[piece.type] || 0;
-            totalMaterial += val;
-            if (piece.color === 0) {
-                openingScore += val;
-                endgameScore += val;
-                if (piece.type === 0) whitePawns.push(piece);
-                else if (piece.type === 5) whiteKing = piece;
-            } else {
-                openingScore -= val;
-                endgameScore -= val;
-                if (piece.type === 0) blackPawns.push(piece);
-                else if (piece.type === 5) blackKing = piece;
-            }
-        }
-
-        // Calculate game phase for tapered evaluation
+        const totalMaterial = pieces.reduce((sum, p) => sum + (pieceValues[p.type] || 0), 0);
         const phase = this.calculateGamePhase(totalMaterial);
 
-        // PST eval - blend opening and endgame values per piece
         for (const piece of pieces) {
-            const tableIndex = piece.type;
+            const val = pieceValues[piece.type] || 0;
+            const sign = piece.color === 0 ? 1 : -1;
+            openingScore += sign * val;
+            endgameScore += sign * val;
+
+            if (piece.type === 0) {
+                (piece.color === 0 ? whitePawns : blackPawns).push(piece);
+            } else if (piece.type === 5) {
+                if (piece.color === 0) whiteKing = piece;
+                else blackKing = piece;
+            }
+
             const tableIndexEG = piece.type === 5 ? 6 : piece.type;
-            const pstOpening = pieceSquareTables[tableIndex];
+            const pstOpening = pieceSquareTables[piece.type];
             const pstEndgame = pieceSquareTables[tableIndexEG];
             const row = piece.color === 0 ? piece.y : 7 - piece.y;
 
             if (pstOpening && pstEndgame) {
-                const openingValue = pstOpening[row][piece.x];
-                const endgameValue = pstEndgame[row][piece.x];
-                const blendedPstValue = (openingValue * phase) + (endgameValue * (1 - phase));
-
-                if (piece.color === 0) {
-                    openingScore += blendedPstValue;
-                    endgameScore += blendedPstValue;
-                } else {
-                    openingScore -= blendedPstValue;
-                    endgameScore -= blendedPstValue;
-                }
+                const blendedPstValue = pstOpening[row][piece.x] * phase + pstEndgame[row][piece.x] * (1 - phase);
+                openingScore += sign * blendedPstValue;
+                endgameScore += sign * blendedPstValue;
             }
         }
 
@@ -165,9 +146,7 @@ export const evaluationMethods = {
             // Only evaluate rooks and queens (they benefit from open files)
             if (piece.type !== 3 && piece.type !== 4) continue;
 
-            const isOpen = piece.color === 0 
-                ? !whitePawnFiles.has(piece.x) && !blackPawnFiles.has(piece.x)
-                : !whitePawnFiles.has(piece.x) && !blackPawnFiles.has(piece.x);
+            const isOpen = !whitePawnFiles.has(piece.x) && !blackPawnFiles.has(piece.x);
 
             if (isOpen) {
                 // Bonus for rook/queen on open file
@@ -292,29 +271,15 @@ export const evaluationMethods = {
     },
 
     countPieceMobility(piece) {
-        if (piece.type === 0) return this.countPawnMobility(piece);
-
-        if (piece.type === 2) {
-            return this.countStepMobility(piece, this.board.steps.knight);
+        switch (piece.type) {
+            case 0: return this.countPawnMobility(piece);
+            case 2: return this.countStepMobility(piece, this.board.steps.knight);
+            case 5: return this.countStepMobility(piece, this.board.steps.king);
+            case 1: return this.countSlidingMobility(piece, this.board.steps.bishop);
+            case 3: return this.countSlidingMobility(piece, this.board.steps.rook);
+            case 4: return this.countSlidingMobility(piece, this.board.steps.queen);
+            default: return 0;
         }
-
-        if (piece.type === 5) {
-            return this.countStepMobility(piece, this.board.steps.king);
-        }
-
-        if (piece.type === 1) {
-            return this.countSlidingMobility(piece, this.board.steps.bishop);
-        }
-
-        if (piece.type === 3) {
-            return this.countSlidingMobility(piece, this.board.steps.rook);
-        }
-
-        if (piece.type === 4) {
-            return this.countSlidingMobility(piece, this.board.steps.queen);
-        }
-
-        return 0;
     },
 
     countPawnMobility(piece) {
@@ -370,22 +335,21 @@ export const evaluationMethods = {
         return mobility;
     },
 
+    _pawnFileMap(pawns) {
+        const map = new Map();
+        for (const pawn of pawns) {
+            if (!map.has(pawn.x)) map.set(pawn.x, []);
+            map.get(pawn.x).push(pawn);
+        }
+        return map;
+    },
+
     evaluatePawnStructure(whitePawns, blackPawns, phase) {
         let openingScore = 0;
         let endgameScore = 0;
 
-        // Build pawn file maps for O(1) access
-        const whitePawnFiles = new Map();
-        const blackPawnFiles = new Map();
-        
-        for (const pawn of whitePawns) {
-            if (!whitePawnFiles.has(pawn.x)) whitePawnFiles.set(pawn.x, []);
-            whitePawnFiles.get(pawn.x).push(pawn);
-        }
-        for (const pawn of blackPawns) {
-            if (!blackPawnFiles.has(pawn.x)) blackPawnFiles.set(pawn.x, []);
-            blackPawnFiles.get(pawn.x).push(pawn);
-        }
+        const whitePawnFiles = this._pawnFileMap(whitePawns);
+        const blackPawnFiles = this._pawnFileMap(blackPawns);
 
         // Pawn space control: count how many squares on each side are controlled by friendly pawns vs enemy pawns
         const whitePawnSpace = new Set();
@@ -439,87 +403,49 @@ export const evaluationMethods = {
             }
         }
 
-        // Analyze white pawns
-        for (const pawn of whitePawns) {
-            // Check for doubled pawns
-            const fileCount = whitePawnFiles.get(pawn.x).length;
-            if (fileCount > 1) {
-                const doubledPenalty = 10 * (fileCount - 1);
-                openingScore -= doubledPenalty;
-                endgameScore -= doubledPenalty * 1.5; // More severe in endgame
-            }
-
-            // Check for isolated pawns (no pawn on adjacent files)
-            const hasLeft = whitePawnFiles.has(pawn.x - 1);
-            const hasRight = whitePawnFiles.has(pawn.x + 1);
-            if (!hasLeft && !hasRight) {
-                openingScore -= 5;
-                endgameScore -= 10; // More severe in endgame
-            }
-
-            // Check for backward pawns (pawn blocked with no support from adjacent pawns)
-            const squareInFront = pawn.y - 1;
-            const blockedByBlack = squareInFront >= 0 && blackPawns.some(p => p.x === pawn.x && p.y === squareInFront);
-            const supportedByAdjacent = (whitePawnFiles.has(pawn.x - 1) && whitePawnFiles.get(pawn.x - 1).some(p => p.y < pawn.y)) ||
-                                       (whitePawnFiles.has(pawn.x + 1) && whitePawnFiles.get(pawn.x + 1).some(p => p.y < pawn.y));
-            if (blockedByBlack && !supportedByAdjacent) {
-                openingScore -= 8;
-                endgameScore -= 12;
-            }
-
-            // Bonus for passed pawns
-            const isPassedPawn = !blackPawns.some(p => 
-                (p.x === pawn.x || p.x === pawn.x - 1 || p.x === pawn.x + 1) && 
-                p.y <= pawn.y
-            );
-            if (isPassedPawn) {
-                const passedBonus = 15 + (6 - pawn.y) * 5;
-                openingScore += passedBonus * 0.5;
-                endgameScore += passedBonus * 2; // More valuable in endgame
-            }
-        }
-
-        // Analyze black pawns
-        for (const pawn of blackPawns) {
-            // Check for doubled pawns
-            const fileCount = blackPawnFiles.get(pawn.x).length;
-            if (fileCount > 1) {
-                const doubledPenalty = 10 * (fileCount - 1);
-                openingScore += doubledPenalty;
-                endgameScore += doubledPenalty * 1.5;
-            }
-
-            // Check for isolated pawns
-            const hasLeft = blackPawnFiles.has(pawn.x - 1);
-            const hasRight = blackPawnFiles.has(pawn.x + 1);
-            if (!hasLeft && !hasRight) {
-                openingScore += 5;
-                endgameScore += 10;
-            }
-
-            // Check for backward pawns (pawn blocked with no support from adjacent pawns)
-            const squareInFront = pawn.y + 1;
-            const blockedByWhite = squareInFront <= 7 && whitePawns.some(p => p.x === pawn.x && p.y === squareInFront);
-            const supportedByAdjacent = (whitePawnFiles.has(pawn.x - 1) && whitePawnFiles.get(pawn.x - 1).some(p => p.y > pawn.y)) ||
-                                       (whitePawnFiles.has(pawn.x + 1) && whitePawnFiles.get(pawn.x + 1).some(p => p.y > pawn.y));
-            if (blockedByWhite && !supportedByAdjacent) {
-                openingScore += 8;
-                endgameScore += 12;
-            }
-            
-            // Bonus for passed pawns
-            const isPassedPawn = !whitePawns.some(p => 
-                (p.x === pawn.x || p.x === pawn.x - 1 || p.x === pawn.x + 1) && 
-                p.y >= pawn.y
-            );
-            if (isPassedPawn) {
-                const passedBonus = 15 + (pawn.y + 1) * 5;
-                openingScore -= passedBonus * 0.5;
-                endgameScore -= passedBonus * 2;
-            }
-        }
+        const white = this._analyzePawnGroup(whitePawns, whitePawnFiles, blackPawns, -1, whitePawnFiles);
+        const black = this._analyzePawnGroup(blackPawns, blackPawnFiles, whitePawns, 1, whitePawnFiles);
+        openingScore += white.opening - black.opening;
+        endgameScore += white.endgame - black.endgame;
 
         return { opening: openingScore, endgame: endgameScore };
+    },
+
+    _analyzePawnGroup(pawns, ownFiles, enemyPawns, advanceDir, supportFiles) {
+        let opening = 0, endgame = 0;
+        for (const pawn of pawns) {
+            const fileCount = ownFiles.get(pawn.x).length;
+            if (fileCount > 1) {
+                const penalty = 10 * (fileCount - 1);
+                opening -= penalty;
+                endgame -= penalty * 1.5;
+            }
+
+            if (!ownFiles.has(pawn.x - 1) && !ownFiles.has(pawn.x + 1)) {
+                opening -= 5;
+                endgame -= 10;
+            }
+
+            const squareInFront = pawn.y + advanceDir;
+            if (squareInFront >= 0 && squareInFront <= 7) {
+                const blocked = enemyPawns.some(p => p.x === pawn.x && p.y === squareInFront);
+                const supported = (supportFiles.has(pawn.x - 1) && supportFiles.get(pawn.x - 1).some(p => advanceDir < 0 ? p.y < pawn.y : p.y > pawn.y)) ||
+                                  (supportFiles.has(pawn.x + 1) && supportFiles.get(pawn.x + 1).some(p => advanceDir < 0 ? p.y < pawn.y : p.y > pawn.y));
+                if (blocked && !supported) { opening -= 8; endgame -= 12; }
+            }
+
+            const isPassed = !enemyPawns.some(p =>
+                (p.x === pawn.x || p.x === pawn.x - 1 || p.x === pawn.x + 1) &&
+                (advanceDir < 0 ? p.y <= pawn.y : p.y >= pawn.y)
+            );
+            if (isPassed) {
+                const advancement = advanceDir < 0 ? 6 - pawn.y : pawn.y + 1;
+                const passedBonus = 15 + advancement * 5;
+                opening += passedBonus * 0.5;
+                endgame += passedBonus * 2;
+            }
+        }
+        return { opening, endgame };
     },
 
     evaluateKingSafety(pieces, whiteKing, blackKing, isEndgame, pressure) {
@@ -588,21 +514,14 @@ export const evaluationMethods = {
     evaluateKingShelter(king, color, pieceMap) {
         let shelterScore = 0;
         const direction = color === 0 ? -1 : 1;
+        const y = king.y + direction;
+        if (y < 0 || y > 7) return 0;
 
-        // Check for pawns protecting the king
-        const shelterPositions = [
-            [king.x - 1, king.y + direction],
-            [king.x, king.y + direction],
-            [king.x + 1, king.y + direction]
-        ];
-
-        for (const [x, y] of shelterPositions) {
-            if (x < 0 || x > 7 || y < 0 || y > 7) continue;
-            const key = `${x},${y}`;
-            const pawn = pieceMap.get(key);
-            if (pawn && pawn.color === color && pawn.type === 0) {  // type 0 = PAWN
-                shelterScore += 10; // Bonus for each pawn protecting the king
-            }
+        for (const dx of [-1, 0, 1]) {
+            const x = king.x + dx;
+            if (x < 0 || x > 7) continue;
+            const pawn = pieceMap.get(`${x},${y}`);
+            if (pawn && pawn.color === color && pawn.type === 0) shelterScore += 10;
         }
 
         return shelterScore;
