@@ -76,16 +76,17 @@ export const evaluationMethods = {
 
         // King safety evaluation
         const isEndgame = phase < 0.3;
-        const kingSafetyScore = this.evaluateKingSafety(pieces, whiteKing, blackKing, isEndgame);
+        const { attacked, pressure } = this._buildAttackMaps();
+        const kingSafetyScore = this.evaluateKingSafety(pieces, whiteKing, blackKing, isEndgame, pressure);
         openingScore += kingSafetyScore;
         endgameScore += kingSafetyScore * 0.5; // King safety matters less in endgame
 
         // Development evaluation
-        const developmentScore = this.evaluateDevelopment(pieces, whiteKing, blackKing, phase);
+        const developmentScore = this.evaluateDevelopment(pieces, whiteKing, blackKing, phase, pressure);
         openingScore += developmentScore;
 
         // Mobility evaluation
-        const mobilityScore = this.evaluateMobility(pieces);
+        const mobilityScore = this.evaluateMobility(pieces, attacked);
         openingScore += mobilityScore * 0.8;
         endgameScore += mobilityScore;
 
@@ -98,6 +99,59 @@ export const evaluationMethods = {
         const finalScore = (openingScore * phase) + (endgameScore * (1 - phase));
 
         return finalScore / 100; // Normalize the score
+    },
+
+    _buildAttackMaps() {
+        const attacked = [new Uint8Array(64), new Uint8Array(64)];
+        const pressure = [new Float32Array(64), new Float32Array(64)];
+        const dirs = this.board.steps;
+
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const code = this.board.getPieceCode(x, y);
+                if (code === -1) continue;
+
+                const color = Math.floor(code / 6);
+                const type = code % 6;
+                const weight = type === 4 ? 3 : type === 3 ? 2 : 1;
+
+                const mark = (tx, ty) => {
+                    const sq = ty * 8 + tx;
+                    attacked[color][sq] = 1;
+                    pressure[color][sq] += weight;
+                };
+
+                if (type === 0) {
+                    const dir = color === 0 ? -1 : 1;
+                    for (const dx of [-1, 1]) {
+                        const nx = x + dx, ny = y + dir;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) mark(nx, ny);
+                    }
+                } else if (type === 2) {
+                    for (const [dx, dy] of dirs.knight) {
+                        const nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) mark(nx, ny);
+                    }
+                } else if (type === 5) {
+                    for (const [dx, dy] of dirs.king) {
+                        const nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) mark(nx, ny);
+                    }
+                } else {
+                    const slideDirs = type === 1 ? dirs.bishop : type === 3 ? dirs.rook : dirs.queen;
+                    for (const [dx, dy] of slideDirs) {
+                        let nx = x + dx, ny = y + dy;
+                        while (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                            mark(nx, ny);
+                            if (this.board.occupied(nx, ny)) break;
+                            nx += dx; ny += dy;
+                        }
+                    }
+                }
+            }
+        }
+
+        return { attacked, pressure };
     },
 
     evaluateRookOpenFiles(pieces, whitePawns, blackPawns) {
@@ -125,14 +179,15 @@ export const evaluationMethods = {
         return score;
     },
 
-    evaluateMobility(pieces) {
+    evaluateMobility(pieces, attacked) {
         let score = 0;
 
         for (const piece of pieces) {
             let mobility = this.countPieceMobility(piece);
 
             if (piece.type === 2 || piece.type === 1) {
-                const safeSquares = this.countSafePieceMobility(piece);
+                const enemyAttacked = attacked[1 - piece.color];
+                const safeSquares = this.countSafePieceMobility(piece, enemyAttacked);
                 if (safeSquares <= 1) {
                     const distanceFromCenter = Math.max(Math.abs(piece.x - 3.5), Math.abs(piece.y - 3.5));
                     const trappedPenalty = 20 + Math.max(0, Math.floor((distanceFromCenter - 2.5) * 10));
@@ -146,51 +201,37 @@ export const evaluationMethods = {
         return score;
     },
 
-    countSafePieceMobility(piece) {
-        if (piece.type === 2) return this.countSafeStepMobility(piece, this.board.steps.knight);
-        if (piece.type === 1) return this.countSafeSlidingMobility(piece, this.board.steps.bishop);
+    countSafePieceMobility(piece, enemyAttacked) {
+        if (piece.type === 2) return this.countSafeStepMobility(piece, this.board.steps.knight, enemyAttacked);
+        if (piece.type === 1) return this.countSafeSlidingMobility(piece, this.board.steps.bishop, enemyAttacked);
         return 0;
     },
 
-    countSafeStepMobility(piece, steps) {
+    countSafeStepMobility(piece, steps, enemyAttacked) {
         let safeMoves = 0;
-        const enemy = this.board.opponent(piece.color);
-
         for (const [dx, dy] of steps) {
-            const x = piece.x + dx;
-            const y = piece.y + dy;
+            const x = piece.x + dx, y = piece.y + dy;
             if (!this.board.inside(x, y) || this.board.sameColor(x, y, piece.color)) continue;
-            if (!this.board.squareAttackedBy(x, y, enemy)) {
-                safeMoves++;
-            }
+            if (!enemyAttacked[y * 8 + x]) safeMoves++;
         }
-
         return safeMoves;
     },
 
-    countSafeSlidingMobility(piece, directions) {
+    countSafeSlidingMobility(piece, directions, enemyAttacked) {
         let safeMoves = 0;
-        const enemy = this.board.opponent(piece.color);
-
         for (const [dx, dy] of directions) {
-            let x = piece.x + dx;
-            let y = piece.y + dy;
-
+            let x = piece.x + dx, y = piece.y + dy;
             while (this.board.inside(x, y)) {
                 if (this.board.sameColor(x, y, piece.color)) break;
-                if (!this.board.squareAttackedBy(x, y, enemy)) {
-                    safeMoves++;
-                }
+                if (!enemyAttacked[y * 8 + x]) safeMoves++;
                 if (this.board.enemyColor(x, y, piece.color)) break;
-                x += dx;
-                y += dy;
+                x += dx; y += dy;
             }
         }
-
         return safeMoves;
     },
 
-    evaluateDevelopment(pieces, whiteKing, blackKing, phase) {
+    evaluateDevelopment(pieces, whiteKing, blackKing, phase, pressure) {
         // Apply development penalty only early in the game (when phase is high)
         if (phase < 0.3) return 0;
 
@@ -206,13 +247,13 @@ export const evaluationMethods = {
             score += piece.color === 0 ? developmentScore : -developmentScore;
         }
 
-        score += this.evaluateOpeningKingPlacement(whiteKing, 0, 1) * phase;
-        score -= this.evaluateOpeningKingPlacement(blackKing, 1, 0) * phase;
+        score += this.evaluateOpeningKingPlacement(whiteKing, 0, 1, pressure) * phase;
+        score -= this.evaluateOpeningKingPlacement(blackKing, 1, 0, pressure) * phase;
 
         return score;
     },
 
-    evaluateOpeningKingPlacement(king, color, enemyColor) {
+    evaluateOpeningKingPlacement(king, color, enemyColor, pressure) {
         if (!king) return 0;
 
         const homeRank = color === 0 ? 7 : 0;
@@ -227,7 +268,7 @@ export const evaluationMethods = {
         if (isHome && canStillCastle) return 15;
         if (isHome) return -20;
 
-        const followUpPressure = this.countKingPressure(king, enemyColor);
+        const followUpPressure = this.countKingPressure(king, enemyColor, pressure);
         if (followUpPressure < 2) {
             return -20;
         }
@@ -235,34 +276,19 @@ export const evaluationMethods = {
         return -45;
     },
 
-    countKingPressure(king, enemyColor) {
+    countKingPressure(king, enemyColor, pressure) {
         if (!king) return 0;
 
-        let pressure = 0;
-        const pieces = this.board.getPieces();
-        const adjacentSquares = [
-            [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]
-        ];
+        const enemyPressure = pressure[enemyColor];
+        let total = enemyPressure[king.y * 8 + king.x];
 
-        for (const piece of pieces) {
-            if (piece.color !== enemyColor) continue;
-            if (this.board.attacksSquare(piece.x, piece.y, king.x, king.y)) {
-                pressure += piece.type === 4 ? 3 : piece.type === 3 ? 2 : 1;
-                continue;
-            }
-
-            for (const [dx, dy] of adjacentSquares) {
-                const x = king.x + dx;
-                const y = king.y + dy;
-                if (!this.board.inside(x, y)) continue;
-                if (this.board.attacksSquare(piece.x, piece.y, x, y)) {
-                    pressure += 0.5;
-                    break;
-                }
-            }
+        for (const [dx, dy] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]) {
+            const x = king.x + dx, y = king.y + dy;
+            if (x < 0 || x > 7 || y < 0 || y > 7) continue;
+            total += enemyPressure[y * 8 + x] * 0.5;
         }
 
-        return pressure;
+        return total;
     },
 
     countPieceMobility(piece) {
@@ -496,7 +522,7 @@ export const evaluationMethods = {
         return { opening: openingScore, endgame: endgameScore };
     },
 
-    evaluateKingSafety(pieces, whiteKing, blackKing, isEndgame) {
+    evaluateKingSafety(pieces, whiteKing, blackKing, isEndgame, pressure) {
         let score = 0;
         const kingSafetyWeight = isEndgame ? 0.5 : 2; // King safety is less critical in endgame, more critical in middlegame
         const placementWeight = isEndgame ? 0.3 : 1;
@@ -528,8 +554,8 @@ export const evaluationMethods = {
             score -= kingPawnShield * kingSafetyWeight;
         }
 
-        score += this.evaluateOpeningKingPlacement(whiteKing, 0, 1) * placementWeight;
-        score -= this.evaluateOpeningKingPlacement(blackKing, 1, 0) * placementWeight;
+        score += this.evaluateOpeningKingPlacement(whiteKing, 0, 1, pressure) * placementWeight;
+        score -= this.evaluateOpeningKingPlacement(blackKing, 1, 0, pressure) * placementWeight;
 
         return score;
     },
