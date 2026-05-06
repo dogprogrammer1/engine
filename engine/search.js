@@ -1,3 +1,5 @@
+import { pieceValues } from "./tables.js";
+
 export const searchMethods = {
     findBestMove(depth) {
         const MAXDEPTH = 10;
@@ -18,20 +20,16 @@ export const searchMethods = {
         this.killerMoves = Array(depth + 1).fill(null).map(() => []);
         
         let bestMove = moves[0];
-        let bestScore = this.color === 0 ? -Infinity : Infinity;
         let previousIterationMoves = [];
 
-        //iteration
         for (let currentDepth = 1; currentDepth <= depth; currentDepth++) {
-            
             let tempBestScore = this.color === 0 ? -Infinity : Infinity;
             let tempBestMove = moves[0];
-            
-            // Sort moves based on previous iteration results
-            const sortedMoves = this.sortMovesByPreviousResults(moves, previousIterationMoves);
+
+            this.sortMovesByPreviousResults(moves, previousIterationMoves);
             previousIterationMoves = [];
-            
-            for (const move of sortedMoves) {
+
+            for (const move of moves) {
                 const boardState = this.board.cloneState();
                 
                 // Make the move
@@ -60,47 +58,27 @@ export const searchMethods = {
                 previousIterationMoves.push({ move, score });
             }
             
-            // Update best move for this iteration
             bestMove = tempBestMove;
-            bestScore = tempBestScore;
         }
         
         return bestMove;
     },
 
     sortMovesByPreviousResults(moves, previousResults) {
-        // Build a fast lookup map - using string keys only when needed
         const resultMap = new Map();
-        for (let i = 0; i < previousResults.length; i++) {
-            const result = previousResults[i];
+        for (const result of previousResults) {
             const key = `${result.move.x1},${result.move.y1},${result.move.x2},${result.move.y2}`;
             resultMap.set(key, result.score);
         }
-        
-        // Sort moves directly without creating intermediate objects
         moves.sort((a, b) => {
-            const keyA = `${a.x1},${a.y1},${a.x2},${a.y2}`;
-            const keyB = `${b.x1},${b.y1},${b.x2},${b.y2}`;
-            const scoreA = resultMap.get(keyA) ?? 0;
-            const scoreB = resultMap.get(keyB) ?? 0;
-            
-            // Sort descending for white, ascending for black
-            return this.color === 0 ? scoreB - scoreA : scoreA - scoreB;
+            const sa = resultMap.get(`${a.x1},${a.y1},${a.x2},${a.y2}`) ?? 0;
+            const sb = resultMap.get(`${b.x1},${b.y1},${b.x2},${b.y2}`) ?? 0;
+            return this.color === 0 ? sb - sa : sa - sb;
         });
-        
-        return moves;
     },
 
     getPieceValue(type) {
-        switch(type) {
-            case 0: return 100;  // Pawn
-            case 1: return 330;  // Bishop
-            case 2: return 320;  // Knight
-            case 3: return 500;  // Rook
-            case 4: return 900;  // Queen
-            case 5: return 10000; // King (never captured)
-            default: return 0;
-        }
+        return pieceValues[type] ?? 0;
     },
 
     minimax(depth, alpha, beta) {
@@ -138,62 +116,27 @@ export const searchMethods = {
             }
         }
         
-        let value;
+        let value = maximizingPlayer ? -Infinity : Infinity;
         let bestMove = null;
         const alphaOrig = alpha;
         const betaOrig = beta;
-        
-        // Sort moves with improved heuristic
+
         this.orderMoves(moves);
-        
-        if (maximizingPlayer) {
-            value = -Infinity;
-            
-            for (const move of moves) {
-                const boardState = this.board.cloneState();
-                
-                // Make move
-                this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
-                this.board.turn = 1 - this.board.turn;
-                
-                // Recursive minimax call
-                const childValue = this.minimax(depth - 1, alpha, beta);
-                
-                // Restore board
-                this.board.restoreState(boardState);
-                
-                if (childValue > value) {
-                    value = childValue;
-                    bestMove = move;
-                }
-                
-                alpha = Math.max(alpha, value);
-                if (alpha >= beta) break; // Beta cutoff - early termination
+
+        for (const move of moves) {
+            const boardState = this.board.cloneState();
+            this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+            this.board.turn = 1 - this.board.turn;
+            const childValue = this.minimax(depth - 1, alpha, beta);
+            this.board.restoreState(boardState);
+
+            if (maximizingPlayer ? childValue > value : childValue < value) {
+                value = childValue;
+                bestMove = move;
             }
-        } else {
-            value = Infinity;
-            
-            for (const move of moves) {
-                const boardState = this.board.cloneState();
-                
-                // Make move
-                this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
-                this.board.turn = 1 - this.board.turn;
-                
-                // Recursive minimax call
-                const childValue = this.minimax(depth - 1, alpha, beta);
-                
-                // Restore board
-                this.board.restoreState(boardState);
-                
-                if (childValue < value) {
-                    value = childValue;
-                    bestMove = move;
-                }
-                
-                beta = Math.min(beta, value);
-                if (alpha >= beta) break; // Alpha cutoff - early termination
-            }
+            if (maximizingPlayer) { alpha = Math.max(alpha, value); }
+            else { beta = Math.min(beta, value); }
+            if (alpha >= beta) break;
         }
         
         // Store in transposition table
@@ -243,41 +186,24 @@ export const searchMethods = {
             return valueB - valueA;
         });
         
-        if (maximizingPlayer) {
-            let value = standPat;
-            for (const move of tacticalMoves) {
-                const boardState = this.board.cloneState();
-                
-                this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
-                this.board.turn = 1 - this.board.turn;
-                
-                const childValue = this.quiescenceSearch(alpha, beta, depthRemaining - 1);
-                
-                this.board.restoreState(boardState);
-                
+        let value = standPat;
+        for (const move of tacticalMoves) {
+            const boardState = this.board.cloneState();
+            this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+            this.board.turn = 1 - this.board.turn;
+            const childValue = this.quiescenceSearch(alpha, beta, depthRemaining - 1);
+            this.board.restoreState(boardState);
+
+            if (maximizingPlayer) {
                 value = Math.max(value, childValue);
                 alpha = Math.max(alpha, value);
-                if (alpha >= beta) break;
-            }
-            return value;
-        } else {
-            let value = standPat;
-            for (const move of tacticalMoves) {
-                const boardState = this.board.cloneState();
-                
-                this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
-                this.board.turn = 1 - this.board.turn;
-                
-                const childValue = this.quiescenceSearch(alpha, beta, depthRemaining - 1);
-                
-                this.board.restoreState(boardState);
-                
+            } else {
                 value = Math.min(value, childValue);
                 beta = Math.min(beta, value);
-                if (alpha >= beta) break;
             }
-            return value;
+            if (alpha >= beta) break;
         }
+        return value;
     },
 
     generateCaptureMoves(color) {
@@ -328,30 +254,14 @@ export const searchMethods = {
     },
 
     orderMoves(moves) {
-        // Pre-calculate piece values for all moves using a single pass
-        const moveScores = [];
-        
+        const scores = new Map();
         for (const move of moves) {
             const target = this.board.getPiece(move.x2, move.y2);
             const source = this.board.getPiece(move.x1, move.y1);
-            
-            let score = 0;
-            
-            // Captures: MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
-            if (target[1] !== -1) {
-                score = this.getPieceValue(target[1]) * 10 - this.getPieceValue(source[1]);
-            }
-            
-            moveScores.push({ move, score });
+            scores.set(move, target[1] !== -1
+                ? this.getPieceValue(target[1]) * 10 - this.getPieceValue(source[1])
+                : 0);
         }
-        
-        // Sort by score descending
-        moveScores.sort((a, b) => b.score - a.score);
-        
-        // Replace original moves array with sorted moves - in-place for performance
-        moves.length = 0;
-        for (let i = 0; i < moveScores.length; i++) {
-            moves[i] = moveScores[i].move;
-        }
+        moves.sort((a, b) => scores.get(b) - scores.get(a));
     }
 };
