@@ -81,21 +81,19 @@ export const pieceSquareTables = {
         };
 
 export const tableMethods = {
-    initializeHash() {
+    _computeZobristHash() {
         let hash = 0n;
-        const pieces = this.board.getPieces();
-        
-        for (const piece of pieces) {
-            const square = piece.y * 8 + piece.x;
-            hash ^= this.zobristTable[piece.color][piece.type][square];
+        for (const piece of this.board.getPieces()) {
+            hash ^= this.zobristTable[piece.color][piece.type][piece.y * 8 + piece.x];
         }
-        
-        // XOR with turn and castling rights
         hash ^= BigInt(this.board.turn);
-        hash ^= BigInt(this.board.canCastle[0] << 2 | this.board.canCastle[1] << 1 | 
+        hash ^= BigInt(this.board.canCastle[0] << 2 | this.board.canCastle[1] << 1 |
                        this.board.canCastle[2] << 3 | this.board.canCastle[3]);
-        
-        this.currentZobristHash = hash;
+        return hash;
+    },
+
+    initializeHash() {
+        this.currentZobristHash = this._computeZobristHash();
     },
 
     initializeZobristTable() {
@@ -126,22 +124,7 @@ export const tableMethods = {
     },
 
     calculateZobristHash() {
-        // Optimize: rebuild from scratch only when needed (after board restore)
-        let hash = 0n;
-        const pieces = this.board.getPieces();
-        
-        for (const piece of pieces) {
-            const square = piece.y * 8 + piece.x;
-            hash ^= this.zobristTable[piece.color][piece.type][square];
-        }
-        
-        // XOR with turn and castling rights for completeness
-        hash ^= BigInt(this.board.turn);
-        hash ^= BigInt(this.board.canCastle[0] << 2 | this.board.canCastle[1] << 1 | 
-                       this.board.canCastle[2] << 3 | this.board.canCastle[3]);
-        
-        // Convert to numeric hash for faster Map lookups (using last 53 bits of BigInt)
-        return Number(hash & 0x1FFFFFFFFFFFFFn);
+        return Number(this._computeZobristHash() & 0x1FFFFFFFFFFFFFn);
     },
 
     lookupTransposition(hash, depth) {
