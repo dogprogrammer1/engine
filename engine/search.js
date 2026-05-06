@@ -118,9 +118,13 @@ export const searchMethods = {
             if (alpha >= beta) return tabEntry.score;
         }
         
-        // Generate legal moves first so terminal positions are recognized even at leaf nodes
+        // Use quiescence search at leaf nodes for better tactical evaluation
+        if (depth === 0) {
+            return this.quiescenceSearch(alpha, beta);
+        }
+
         const moves = this.board.generateLegalMoves(this.board.turn);
-        
+
         if (moves.length === 0) {
             if (this.board.inCheck(this.board.turn)) {
                 // Checkmate: penalize based on depth (favor faster checkmates)
@@ -132,11 +136,6 @@ export const searchMethods = {
                 this.storeTransposition(zobristHash, depth, 0, 0);
                 return 0;
             }
-        }
-
-        // Use quiescence search at leaf nodes for better tactical evaluation
-        if (depth === 0) {
-            return this.quiescenceSearch(alpha, beta);
         }
         
         let value;
