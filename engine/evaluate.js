@@ -439,7 +439,7 @@ export const evaluationMethods = {
                 (advanceDir < 0 ? p.y <= pawn.y : p.y >= pawn.y)
             );
             if (isPassed) {
-                const advancement = advanceDir < 0 ? 6 - pawn.y : pawn.y + 1;
+                const advancement = pawn.y + 1;
                 const passedBonus = 15 + advancement * 5;
                 opening += passedBonus * 0.5;
                 endgame += passedBonus * 2;
