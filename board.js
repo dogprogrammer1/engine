@@ -47,8 +47,9 @@ const BLACK_KINGSIDE = 2;
 const BLACK_QUEENSIDE = 3;
 
 export default class Board {
-    constructor(color) {
+    constructor(color, options = {}) {
         this.playerColor = color;
+        this.silent = options.silent || false;
         this.reset();
     }
 
@@ -93,7 +94,9 @@ export default class Board {
         // Initialize engine for evaluation - engine plays the opponent color
         const engineColor = this.playerColor === WHITE ? BLACK : WHITE;
         this.engine = new Engine(this, engineColor);
-        console.log(`Board initialized: player color=${this.playerColor}, engine color=${engineColor}`);
+        if (!this.silent) {
+            console.log(`Board initialized: player color=${this.playerColor}, engine color=${engineColor}`);
+        }
     }
 
     opponent(color) {

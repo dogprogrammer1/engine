@@ -9,6 +9,17 @@ export default class Game {
         this.selX = -1;
         this.selY = -1;
         this.engineThinking = false;
+
+        this.engineWorker = new Worker(new URL("./engine/engineWorker.js", import.meta.url), {
+            type: "module"
+        });
+
+        this.engineWorker.onmessage = event => this.handleEngineWorkerMessage(event.data);
+        this.engineWorker.onerror = event => {
+            console.error("Engine worker error:", event);
+            this.engineThinking = false;
+            this.draw();
+        };
     }
 
     click(x, y) {
@@ -43,7 +54,6 @@ export default class Game {
 
                 // If it's now the engine's turn, make a move after a delay
                 if (this.board.turn !== this.playerColor) {
-                    this.engineThinking = true;
                     setTimeout(() => this.makeEngineMove(), 500);
                 }
             }
@@ -59,16 +69,39 @@ export default class Game {
     }
 
     makeEngineMove() {
-        const depth = 4; // Engine search depth
-        const bestMove = this.board.engine.findBestMove(depth);
+        if (this.engineThinking) {
+            return;
+        }
 
+        this.engineThinking = true;
+        this.draw();
+
+        const depth = 4; // Engine search depth
+        this.engineWorker.postMessage({
+            type: "findBestMove",
+            state: this.board.cloneState(),
+            color: this.board.engine.color,
+            depth
+        });
+    }
+
+    handleEngineWorkerMessage(data) {
+        if (data.type !== "bestMove") {
+            if (data.type === "error") {
+                console.error("Engine worker error:", data.message, data.stack);
+            }
+            this.engineThinking = false;
+            this.draw();
+            return;
+        }
+
+        const bestMove = data.bestMove;
         if (bestMove) {
             console.log(`Engine move: (${bestMove.x1},${bestMove.y1}) -> (${bestMove.x2},${bestMove.y2})`);
             console.log(`Board turn before move: ${this.board.turn}, player color: ${this.playerColor}`);
             const moveResult = this.board.move(bestMove.x1, bestMove.y1, bestMove.x2, bestMove.y2);
             console.log(`Move result: ${moveResult}, board turn after: ${this.board.turn}`);
-            
-            // Check if game is over
+
             if (this.board.gameResult?.over) {
                 console.log("Game over:", this.board.gameResult);
                 this.engineThinking = false;
@@ -76,18 +109,16 @@ export default class Game {
                 return;
             }
 
-            // If it's player's turn again, allow clicks
-            if (this.board.turn === this.playerColor) {
+            if (this.board.turn !== this.playerColor) {
                 this.engineThinking = false;
-            } else {
-                // Engine has another move in some edge case
                 setTimeout(() => this.makeEngineMove(), 500);
+                return;
             }
         } else {
             console.log("No legal moves available");
-            this.engineThinking = false;
         }
 
+        this.engineThinking = false;
         this.draw();
     }
 
