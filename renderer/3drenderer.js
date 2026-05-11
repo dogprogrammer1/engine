@@ -79,7 +79,7 @@ class BoardSquare {
     this.boardX = x;
     this.boardY = y;
     this.size = size;
-    this.transform = new Transform(x * size, 0, y * size);
+    this.transform = new Transform((7 - x) * size, 0, y * size);
     
     // Create quad vertices for the square
     const s = size / 2;
@@ -109,7 +109,7 @@ class Piece3D {
     this.type = type;
     this.color = color;
     this.size = size;
-    this.transform = new Transform(x * size, size * 0.3, y * size);
+    this.transform = new Transform((7 - x) * size, size * 0.3, y * size);
   }
 
   getWorldPoints() {
