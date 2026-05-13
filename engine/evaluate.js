@@ -545,12 +545,4 @@ export const evaluationMethods = {
 
         return shelterScore;
     },
-
-    evaluateBoardNN(){
-        // Placeholder for neural network evaluation logic
-    },
-
-    evaluateBoardNNUE(){
-        // Placeholder for NNUE evaluation logic
-    }
 };

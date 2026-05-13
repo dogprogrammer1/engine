@@ -512,6 +512,94 @@ export default class Board {
         return true;
     }
 
+    generateCandidateMovesForPiece(x1, y1, color, type) {
+        const moves = [];
+        const pushMove = (x2, y2) => {
+            if (this.inside(x2, y2)) {
+                moves.push({ x1, y1, x2, y2 });
+            }
+        };
+
+        if (type === PAWN) {
+            const dir = this.pawnDirection(color);
+            const startRank = this.pawnStartRank(color);
+            const oneStepY = y1 + dir;
+
+            if (this.inside(x1, oneStepY) && !this.occupied(x1, oneStepY)) {
+                pushMove(x1, oneStepY);
+
+                const twoStepY = y1 + 2 * dir;
+                if (y1 === startRank && this.inside(x1, twoStepY) && !this.occupied(x1, twoStepY)) {
+                    pushMove(x1, twoStepY);
+                }
+            }
+
+            for (const dx of [-1, 1]) {
+                const x2 = x1 + dx;
+                const y2 = y1 + dir;
+                if (!this.inside(x2, y2)) continue;
+
+                if (this.enemyColor(x2, y2, color) || (x2 === this.enPassant[0] && y2 === this.enPassant[1])) {
+                    pushMove(x2, y2);
+                }
+            }
+
+            return moves;
+        }
+
+        if (type === KNIGHT) {
+            for (const [dx, dy] of this.steps.knight) {
+                const x2 = x1 + dx;
+                const y2 = y1 + dy;
+                if (this.inside(x2, y2) && !this.sameColor(x2, y2, color)) {
+                    pushMove(x2, y2);
+                }
+            }
+
+            return moves;
+        }
+
+        if (type === KING) {
+            for (const [dx, dy] of this.steps.king) {
+                const x2 = x1 + dx;
+                const y2 = y1 + dy;
+                if (this.inside(x2, y2) && !this.sameColor(x2, y2, color)) {
+                    pushMove(x2, y2);
+                }
+            }
+
+            const homeY = this.homeRank(color);
+            if (x1 === 4 && y1 === homeY) {
+                pushMove(6, homeY);
+                pushMove(2, homeY);
+            }
+
+            return moves;
+        }
+
+        const directions =
+            type === BISHOP ? this.steps.bishop :
+            type === ROOK ? this.steps.rook :
+            this.steps.queen;
+
+        for (const [dx, dy] of directions) {
+            let x2 = x1 + dx;
+            let y2 = y1 + dy;
+
+            while (this.inside(x2, y2)) {
+                if (this.sameColor(x2, y2, color)) break;
+
+                pushMove(x2, y2);
+                if (this.enemyColor(x2, y2, color)) break;
+
+                x2 += dx;
+                y2 += dy;
+            }
+        }
+
+        return moves;
+    }
+
     generateLegalMoves(color = this.turn) {
         const moves = [];
         const saveTurn = this.turn;
@@ -525,11 +613,10 @@ export default class Board {
                     continue;
                 }
 
-                for (let y2 = 0; y2 < 8; y2++) {
-                    for (let x2 = 0; x2 < 8; x2++) {
-                        if (this.isLegalMove(x1, y1, x2, y2)) {
-                            moves.push({ x1, y1, x2, y2 });
-                        }
+                const candidates = this.generateCandidateMovesForPiece(x1, y1, color, piece[1]);
+                for (const move of candidates) {
+                    if (this.isLegalMove(move.x1, move.y1, move.x2, move.y2)) {
+                        moves.push(move);
                     }
                 }
             }
