@@ -36,6 +36,13 @@
     <div id="sideDisplay" aria-live="polite">White: Classical | Black: NNUE_Evaluator</div>
     <div id="evalDisplay" aria-live="polite">Classical eval: 0.00</div>
     <button id="newGameBtn" aria-label="Start a new game">Reset Game</button>
+    <select id = "gameModeSelect" aria-label="Select game mode">
+        <option value="auto">Auto Play</option>
+        <option value="manual">Manual play as white against classical</option>
+        <option value="manualBlack">Manual play as black against classical</option>
+        <option value="manualNNUEWhite">Manual play as white against NNUE</option>
+        <option value="manualNNUEBlack">Manual play as black against NNUE</option>
+    </select>
     <script type="module">
         import Game from "./game.js";
         import Renderer from "./renderer/2drenderer.js";
@@ -45,6 +52,7 @@
         const newGameBtn = document.getElementById("newGameBtn");
         const evalDisplay = document.getElementById("evalDisplay");
         const sideDisplay = document.getElementById("sideDisplay");
+        const gameModeSelect = document.getElementById("gameModeSelect");
         const renderer = new Renderer(canvas);
 
         let game;
@@ -65,6 +73,23 @@
         // Handle new game button
         newGameBtn.addEventListener("click", () => {
             initializeGame();
+        });
+
+        //Handle gamemode select change
+        gameModeSelect.addEventListener("change", () => {
+            const mode = gameModeSelect.value;
+            initializeGame();
+            if (mode === "auto") {
+                game.startAutoPlay();
+            } else if (mode === "manual") {
+                game.startManualPlay("white", "classical");
+            } else if (mode === "manualBlack") {
+                game.startManualPlay("black", "classical");
+            } else if (mode === "manualNNUEWhite") {
+                game.startManualPlay("white", "nnue");
+            } else if (mode === "manualNNUEBlack") {
+                game.startManualPlay("black", "nnue");
+            }
         });
 
         // Handle canvas clicks

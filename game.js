@@ -50,6 +50,42 @@ export default class Game {
     }
 
     click(x, y) {
+        // Don't allow clicks during engine move or if not player's turn
+        if (this.engineThinking || this.board.turn !== this.playerColor) {
+            return;
+        }
+ 
+        if (!this.selected) {
+            if (this.board.getPiece(x, y)[1] !== -1 && this.board.getPiece(x, y)[0] === this.playerColor) {
+                this.selected = true;
+                this.selX = x;
+                this.selY = y;
+            }
+        } else {
+            const clickedPiece = this.board.getPiece(x, y);
+ 
+            if (x === this.selX && y === this.selY) {
+                this.clearSelection();
+            } else if (clickedPiece[0] === this.playerColor) {
+                this.selX = x;
+                this.selY = y;
+            } else if (this.board.move(this.selX, this.selY, x, y)) {
+                this.clearSelection();
+                this.draw();
+                // Check if game is over
+                if (this.board.gameResult?.over) {
+                    console.log("Game over:", this.board.gameResult);
+                    return;
+                }
+ 
+                // If it's now the engine's turn, make a move after a delay
+                if (this.board.turn !== this.playerColor) {
+                    setTimeout(() => this.makeEngineMove(), 500);
+                }
+            }
+        }
+ 
+        this.draw();
         return;
     }
 
@@ -144,6 +180,12 @@ export default class Game {
         }
 
         this.engineWorker.terminate();
+    }
+
+    startManualPlay() {
+        this.destroy();
+        this.clearSelection();
+    
     }
 
     selection() {
