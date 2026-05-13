@@ -2,7 +2,9 @@
 node_modules/
 
 training/datasets/
-training/models/
+training/models/nn/
+training/models/nnue/
+training/models/json_weights/
 
 data/
 
