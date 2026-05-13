@@ -198,32 +198,35 @@ export const searchMethods = {
 
     generateCaptureMoves(color) {
         const moves = [];
-        const pieces = this.board.getPieces();
-        const ownPieces = [];
-        const enemyPieces = [];
         const originalTurn = this.board.turn;
-
-        for (const piece of pieces) {
-            if (piece.color === color) {
-                ownPieces.push(piece);
-            } else {
-                enemyPieces.push(piece);
-            }
-        }
 
         this.board.turn = color;
 
-        for (const piece of ownPieces) {
-            for (const target of enemyPieces) {
-                const move = { x1: piece.x, y1: piece.y, x2: target.x, y2: target.y };
-                if (this.board.canGetTo(move.x1, move.y1, move.x2, move.y2) && this.isMoveKingSafe(move, color)) {
-                    moves.push(move);
-                }
+        for (const piece of this.board.getPieces()) {
+            if (piece.color !== color) {
+                continue;
             }
 
-            if (piece.type === 0 && this.board.enPassant[0] !== -1) {
-                const move = { x1: piece.x, y1: piece.y, x2: this.board.enPassant[0], y2: this.board.enPassant[1] };
-                if (this.board.canGetTo(move.x1, move.y1, move.x2, move.y2) && this.isMoveKingSafe(move, color)) {
+            const candidates = this.board.generateCandidateMovesForPiece(
+                piece.x,
+                piece.y,
+                piece.color,
+                piece.type
+            );
+
+            for (const move of candidates) {
+                const isDirectCapture = this.board.enemyColor(move.x2, move.y2, color);
+                const isEnPassantCapture =
+                    piece.type === 0 &&
+                    move.x1 !== move.x2 &&
+                    move.x2 === this.board.enPassant[0] &&
+                    move.y2 === this.board.enPassant[1];
+
+                if (
+                    (isDirectCapture || isEnPassantCapture) &&
+                    this.board.canGetTo(move.x1, move.y1, move.x2, move.y2) &&
+                    this.isMoveKingSafe(move, color)
+                ) {
                     moves.push(move);
                 }
             }
