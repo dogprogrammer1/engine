@@ -16,8 +16,17 @@ self.addEventListener("message", event => {
       message.evaluator || ENGINE_EVALUATORS.CLASSICAL
     );
 
+    const start = performance.now();
     const bestMove = workerEngine.findBestMove(message.depth);
-    self.postMessage({ type: "bestMove", bestMove });
+    const elapsedMs = performance.now() - start;
+    self.postMessage({
+      type: "bestMove",
+      bestMove,
+      color: message.color,
+      evaluator: workerEngine.evaluator,
+      elapsedMs,
+      nodesEvaluated: workerEngine.nodesEvaluated
+    });
   } catch (error) {
     self.postMessage({ type: "error", message: error.message, stack: error.stack });
   }
