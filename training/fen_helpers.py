@@ -17,6 +17,8 @@ PIECE_TO_PLANE = {
 
 NNUE_SQUARES = 1 + 10 * 64
 NNUE_FEATURES = 64 * NNUE_SQUARES
+NNUE_EXTRA_FEATURE_LAYOUT = "stm_castling_ep"
+NNUE_EXTRA_FEATURES = 14
 
 PIECE_TYPE = {
     "P": 0,
@@ -153,6 +155,31 @@ def _encode_one_side(board, perspective):
             
     return np.array(indices, dtype=np.int32)
 
+
+def _encode_extra_features(side, castling, en_passant):
+    extras = np.zeros(NNUE_EXTRA_FEATURES, dtype=np.float32)
+    us_is_white = side == "w"
+
+    extras[0] = 1.0 if us_is_white else 0.0
+    extras[1] = 0.0 if us_is_white else 1.0
+
+    if us_is_white:
+        extras[2] = 1.0 if "K" in castling else 0.0
+        extras[3] = 1.0 if "Q" in castling else 0.0
+        extras[4] = 1.0 if "k" in castling else 0.0
+        extras[5] = 1.0 if "q" in castling else 0.0
+    else:
+        extras[2] = 1.0 if "k" in castling else 0.0
+        extras[3] = 1.0 if "q" in castling else 0.0
+        extras[4] = 1.0 if "K" in castling else 0.0
+        extras[5] = 1.0 if "Q" in castling else 0.0
+
+    if en_passant != "-":
+        file_char = en_passant[0]
+        extras[6 + "abcdefgh".index(file_char)] = 1.0
+
+    return extras
+
 # Returns:
 # "us": side to move indices
 # "them": opponent indices
@@ -161,6 +188,8 @@ def encode_fen_NNUE(fen):
     parts = fen.strip().split()
     
     side = parts[1]
+    castling = parts[2]
+    en_passant = parts[3]
     board = _parse_fen(fen)
     
     white_indices = _encode_one_side(board, "w")
@@ -176,4 +205,5 @@ def encode_fen_NNUE(fen):
     return {
         "us": us,
         "them": them,
+        "extra": _encode_extra_features(side, castling, en_passant),
     }

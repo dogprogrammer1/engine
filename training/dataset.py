@@ -63,16 +63,18 @@ class NNUEChessDataset (Dataset):
         features = encode_fen_NNUE(self.fens[idx])
         us = torch.from_numpy(features["us"]).long()
         them = torch.from_numpy(features["them"]).long()
+        extra = torch.from_numpy(features["extra"]).float()
         target = torch.tensor(self.targets[idx], dtype=torch.float32)
-        return us, them, target
+        return us, them, extra, target
 
 # NNUE inputs are weird ah so positions have different encoded lengths
 # so unfortunately have to add padding so everything got same length
 def add_padding(batch):
-    us, them, targets = zip(*batch)
+    us, them, extra, targets = zip(*batch)
 
     us = pad_sequence(us, batch_first=True, padding_value=NNUE_FEATURES)
     them = pad_sequence(them, batch_first=True, padding_value=NNUE_FEATURES)
+    extra = torch.stack(extra)
     targets = torch.stack(targets)
 
-    return us, them, targets
+    return us, them, extra, targets

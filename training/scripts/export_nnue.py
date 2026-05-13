@@ -8,8 +8,16 @@ from pathlib import Path
 import torch
 
 
-def load_state_dict(checkpoint_path):
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+SUPPORTED_EXTRA_FEATURE_LAYOUTS = {
+    "stm_castling_ep": 14,
+}
+
+
+def load_checkpoint(checkpoint_path):
+    return torch.load(checkpoint_path, map_location="cpu")
+
+
+def extract_state_dict(checkpoint):
 
     if isinstance(checkpoint, torch.nn.Module):
         return checkpoint.state_dict()
@@ -21,6 +29,15 @@ def load_state_dict(checkpoint_path):
             return checkpoint["model_state_dict"]
 
     return checkpoint
+
+
+def extract_model_config(checkpoint):
+    if isinstance(checkpoint, dict):
+        model_config = checkpoint.get("model_config")
+        if isinstance(model_config, dict):
+            return model_config
+
+    return {}
 
 
 def get_tensor(state_dict, *keys):
@@ -38,7 +55,13 @@ def flatten_tensor(tensor):
 
 
 def export_nnue(input_path, output_path):
-    state_dict = load_state_dict(input_path)
+    checkpoint = load_checkpoint(input_path)
+    state_dict = extract_state_dict(checkpoint)
+    model_config = extract_model_config(checkpoint)
+
+    architecture = "feature_embeddings"
+    if "accumulator.weight" in state_dict:
+        architecture = "accumulator"
 
     embedding = get_tensor(
         state_dict,
@@ -59,13 +82,28 @@ def export_nnue(input_path, output_path):
     fc1_out, fc1_in = fc1_weight.shape
     fc2_out, fc2_in = fc2_weight.shape
     fc3_out, fc3_in = fc3_weight.shape
+    base_input_size = hidden_size * 2
+    extra_input_count = fc1_in - base_input_size
+    extra_feature_layout = model_config.get("extra_feature_layout")
+    layout_is_supported = (
+        extra_feature_layout in SUPPORTED_EXTRA_FEATURE_LAYOUTS
+        and SUPPORTED_EXTRA_FEATURE_LAYOUTS[extra_feature_layout] == extra_input_count
+    )
+    runtime_compatible = architecture == "feature_embeddings" and (
+        extra_input_count == 0 or layout_is_supported
+    )
 
     export_data = {
         "version": 1,
+        "architecture": architecture,
         "featureCount": feature_count,
         "paddingIndex": padding_index,
         "hiddenSize": hidden_size,
-        "inputSize": hidden_size * 2,
+        "inputSize": fc1_in,
+        "baseInputSize": base_input_size,
+        "extraInputCount": extra_input_count,
+        "extraFeatureLayout": extra_feature_layout,
+        "runtimeCompatible": runtime_compatible,
         "fc1Size": fc1_out,
         "fc2Size": fc2_out,
         "outputSize": fc3_out,
@@ -87,18 +125,35 @@ def export_nnue(input_path, output_path):
         json.dump(export_data, handle, separators=(",", ":"))
 
     print(f"Exported NNUE weights to {output_path}")
+    print(f"architecture={architecture}")
     print(f"featureCount={feature_count}")
     print(f"paddingIndex={padding_index}")
     print(f"hiddenSize={hidden_size}")
+    print(f"inputSize={fc1_in}")
+    print(f"extraInputCount={extra_input_count}")
+    print(f"extraFeatureLayout={extra_feature_layout}")
+    print(f"runtimeCompatible={runtime_compatible}")
     print(f"fc1={fc1_out}x{fc1_in}")
     print(f"fc2={fc2_out}x{fc2_in}")
     print(f"fc3={fc3_out}x{fc3_in}")
+
+    if not runtime_compatible:
+        print(
+            "Warning: this checkpoint requires extra inputs beyond hiddenSize * 2. "
+            "The current JS runtime only supports feature_embeddings checkpoints "
+            "with extraInputCount=0 or a recognized extraFeatureLayout."
+        )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Export NNUE weights to JSON")
     parser.add_argument("--input", "-i", required=True, help="Path to .pth checkpoint")
-    parser.add_argument("--output", "-o", default="nnue_weights.json", help="Path to output JSON")
+    parser.add_argument(
+        "--output",
+        "-o",
+        default="public/models/nnue_weights.json",
+        help="Path to output JSON",
+    )
     args = parser.parse_args()
 
     try:
