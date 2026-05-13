@@ -30,19 +30,11 @@ export const searchMethods = {
             previousIterationMoves = [];
 
             for (const move of moves) {
-                const boardState = this.board.cloneState();
-                
-                // Make the move
-                this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+                const undo = this.board.makeMove(move.x1, move.y1, move.x2, move.y2);
                 this.board.turn = 1 - this.board.turn;
-                
-                // Evaluate with minimax
                 const score = this.minimax(currentDepth - 1, -Infinity, Infinity);
+                this.board.unmakeMove(undo);
                 
-                // Restore board state
-                this.board.restoreState(boardState);
-                
-                // Update best move
                 if (this.color === 0) {
                     if (score > tempBestScore) {
                         tempBestScore = score;
@@ -124,11 +116,10 @@ export const searchMethods = {
         this.orderMoves(moves);
 
         for (const move of moves) {
-            const boardState = this.board.cloneState();
-            this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+            const undo = this.board.makeMove(move.x1, move.y1, move.x2, move.y2);
             this.board.turn = 1 - this.board.turn;
             const childValue = this.minimax(depth - 1, alpha, beta);
-            this.board.restoreState(boardState);
+            this.board.unmakeMove(undo);
 
             if (maximizingPlayer ? childValue > value : childValue < value) {
                 value = childValue;
@@ -188,11 +179,10 @@ export const searchMethods = {
         
         let value = standPat;
         for (const move of tacticalMoves) {
-            const boardState = this.board.cloneState();
-            this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+            const undo = this.board.makeMove(move.x1, move.y1, move.x2, move.y2);
             this.board.turn = 1 - this.board.turn;
             const childValue = this.quiescenceSearch(alpha, beta, depthRemaining - 1);
-            this.board.restoreState(boardState);
+            this.board.unmakeMove(undo);
 
             if (maximizingPlayer) {
                 value = Math.max(value, childValue);
@@ -244,12 +234,9 @@ export const searchMethods = {
     },
 
     isMoveKingSafe(move, color) {
-        const boardState = this.board.cloneState();
-
-        this.board.rawMove(move.x1, move.y1, move.x2, move.y2);
+        const undo = this.board.makeMove(move.x1, move.y1, move.x2, move.y2);
         const isSafe = !this.board.inCheck(color);
-
-        this.board.restoreState(boardState);
+        this.board.unmakeMove(undo);
         return isSafe;
     },
 

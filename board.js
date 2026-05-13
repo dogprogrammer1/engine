@@ -387,12 +387,32 @@ export default class Board {
         return false;
     }
 
-    rawMove(x1, y1, x2, y2) {
+    makeMove(x1, y1, x2, y2) {
         const [color, type] = this.getPiece(x1, y1);
         const enemy = this.opponent(color);
-        const target = this.getPiece(x2, y2);
-        if (target[1] !== -1) {
-            this.board[target[0]][target[1]].clear(x2, y2);
+        const targetCode = this.getPieceCode(x2, y2);
+        const undo = {
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            type,
+            targetCode,
+            canCastle: [...this.canCastle],
+            enPassant: [...this.enPassant],
+            turn: this.turn,
+            halfmoveClock: this.halfmoveClock,
+            gameResult: this.gameResult,
+            rookMove: null,
+            enPassantCapture: null,
+            promotion: false
+        };
+
+        if (targetCode !== EMPTY) {
+            const targetColor = Math.floor(targetCode / 6);
+            const targetType = targetCode % 6;
+            this.board[targetColor][targetType].clear(x2, y2);
         }
 
         if (
@@ -404,6 +424,11 @@ export default class Board {
             const capY = color === WHITE ? y2 + 1 : y2 - 1;
             this.board[enemy][PAWN].clear(x2, capY);
             this.setPieceCode(x2, capY, EMPTY);
+            undo.enPassantCapture = {
+                x: x2,
+                y: capY,
+                code: enemy * 6 + PAWN
+            };
         }
 
         this.board[color][type].move(x1, y1, x2, y2);
@@ -412,17 +437,15 @@ export default class Board {
 
         if (type === KING && Math.abs(x2 - x1) === 2) {
             if (x2 === 6) {
-                // Kingside castling: rook h-file to f-file
                 this.board[color][ROOK].move(7, y1, 5, y1);
                 this.setPieceCode(7, y1, EMPTY);
                 this.setPieceCode(5, y1, color * 6 + ROOK);
-                this.canCastle[this.castleIndex(color, true)] = false;
+                undo.rookMove = { fromX: 7, toX: 5, y: y1 };
             } else {
-                // Queenside castling: rook a-file to d-file
                 this.board[color][ROOK].move(0, y1, 3, y1);
                 this.setPieceCode(0, y1, EMPTY);
                 this.setPieceCode(3, y1, color * 6 + ROOK);
-                this.canCastle[this.castleIndex(color, false)] = false;
+                undo.rookMove = { fromX: 0, toX: 3, y: y1 };
             }
         }
 
@@ -430,6 +453,7 @@ export default class Board {
             this.board[color][PAWN].clear(x2, y2);
             this.board[color][QUEEN].set(x2, y2);
             this.setPieceCode(x2, y2, color * 6 + QUEEN);
+            undo.promotion = true;
         }
 
         this.enPassant = [-1, -1];
@@ -450,19 +474,64 @@ export default class Board {
             if (color === BLACK && x1 === 7 && y1 === 0) this.canCastle[BLACK_KINGSIDE] = false;
         }
 
-        if (target[1] === ROOK) {
-            if (target[0] === WHITE && x2 === 0 && y2 === 7) this.canCastle[WHITE_QUEENSIDE] = false;
-            if (target[0] === WHITE && x2 === 7 && y2 === 7) this.canCastle[WHITE_KINGSIDE] = false;
-            if (target[0] === BLACK && x2 === 0 && y2 === 0) this.canCastle[BLACK_QUEENSIDE] = false;
-            if (target[0] === BLACK && x2 === 7 && y2 === 0) this.canCastle[BLACK_KINGSIDE] = false;
+        if (targetCode !== EMPTY && (targetCode % 6) === ROOK) {
+            const targetColor = Math.floor(targetCode / 6);
+            if (targetColor === WHITE && x2 === 0 && y2 === 7) this.canCastle[WHITE_QUEENSIDE] = false;
+            if (targetColor === WHITE && x2 === 7 && y2 === 7) this.canCastle[WHITE_KINGSIDE] = false;
+            if (targetColor === BLACK && x2 === 0 && y2 === 0) this.canCastle[BLACK_QUEENSIDE] = false;
+            if (targetColor === BLACK && x2 === 7 && y2 === 0) this.canCastle[BLACK_KINGSIDE] = false;
         }
 
-        // Update halfmove clock: reset on capture or pawn move, increment otherwise
-        if (target[1] !== -1 || type === PAWN) {
+        if (targetCode !== EMPTY || type === PAWN || undo.enPassantCapture) {
             this.halfmoveClock = 0;
         } else {
             this.halfmoveClock++;
         }
+
+        return undo;
+    }
+
+    unmakeMove(undo) {
+        const { x1, y1, x2, y2, color, type, targetCode } = undo;
+
+        if (undo.promotion) {
+            this.board[color][QUEEN].clear(x2, y2);
+            this.board[color][PAWN].set(x1, y1);
+            this.setPieceCode(x1, y1, color * 6 + PAWN);
+        } else {
+            this.board[color][type].move(x2, y2, x1, y1);
+            this.setPieceCode(x1, y1, color * 6 + type);
+        }
+
+        this.setPieceCode(x2, y2, EMPTY);
+
+        if (undo.rookMove) {
+            const { fromX, toX, y } = undo.rookMove;
+            this.board[color][ROOK].move(toX, y, fromX, y);
+            this.setPieceCode(toX, y, EMPTY);
+            this.setPieceCode(fromX, y, color * 6 + ROOK);
+        }
+
+        if (undo.enPassantCapture) {
+            const { x, y, code } = undo.enPassantCapture;
+            this.board[Math.floor(code / 6)][code % 6].set(x, y);
+            this.setPieceCode(x, y, code);
+        } else if (targetCode !== EMPTY) {
+            const targetColor = Math.floor(targetCode / 6);
+            const targetType = targetCode % 6;
+            this.board[targetColor][targetType].set(x2, y2);
+            this.setPieceCode(x2, y2, targetCode);
+        }
+
+        this.canCastle = [...undo.canCastle];
+        this.enPassant = [...undo.enPassant];
+        this.turn = undo.turn;
+        this.halfmoveClock = undo.halfmoveClock;
+        this.gameResult = undo.gameResult;
+    }
+
+    rawMove(x1, y1, x2, y2) {
+        return this.makeMove(x1, y1, x2, y2);
     }
 
     cloneState() {
@@ -499,17 +568,11 @@ export default class Board {
         if (!this.canGetTo(x1, y1, x2, y2)) return false;
 
         const color = piece[0];
-        const save = this.cloneState();
+        const undo = this.makeMove(x1, y1, x2, y2);
+        const legal = !this.inCheck(color);
+        this.unmakeMove(undo);
 
-        this.rawMove(x1, y1, x2, y2);
-
-        if (this.inCheck(color)) {
-            this.restoreState(save);
-            return false;
-        }
-
-        this.restoreState(save);
-        return true;
+        return legal;
     }
 
     generateCandidateMovesForPiece(x1, y1, color, type) {
@@ -721,8 +784,7 @@ export default class Board {
             return false;
         }
 
-        this.rawMove(x1, y1, x2, y2);
-        this.rebuildSquares();
+        this.makeMove(x1, y1, x2, y2);
         this.turn = 1 - this.turn;
         this.moveHistory.push(this.toFEN());
         
