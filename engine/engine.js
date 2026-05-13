@@ -2,10 +2,16 @@ import { tableMethods } from "./tables.js";
 import { evaluationMethods } from "./evaluate.js";
 import { searchMethods } from "./search.js";
 
+export const ENGINE_EVALUATORS = {
+    CLASSICAL: "classical",
+    NNUE: "NNUE_Evaluator"
+};
+
 class Engine {
-    constructor(board, color) {
+    constructor(board, color, evaluator = ENGINE_EVALUATORS.CLASSICAL) {
         this.board = board;
-        this.color = color; 
+        this.color = color;
+        this.evaluator = this.normalizeEvaluator(evaluator);
         this.transpositionTable = new Map(); // Uses numeric hash for faster lookups
         this.zobristTable = this.initializeZobristTable();
         this.currentZobristHash = 0n; // Cache zobrist hash
@@ -16,6 +22,12 @@ class Engine {
 
     updateBoard(board) {
         this.board = board;
+    }
+
+    normalizeEvaluator(evaluator) {
+        return evaluator === ENGINE_EVALUATORS.NNUE
+            ? ENGINE_EVALUATORS.NNUE
+            : ENGINE_EVALUATORS.CLASSICAL;
     }
 }
 

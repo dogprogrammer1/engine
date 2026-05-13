@@ -152,7 +152,7 @@ export const searchMethods = {
 
     quiescenceSearch(alpha, beta, depthRemaining = 4) {
         const maximizingPlayer = this.board.turn === 0;
-        const standPat = this.evaluateBoardClassical();
+        const standPat = this.evaluateBoard();
         if (depthRemaining <= 0) return standPat;
         
         if (maximizingPlayer) {

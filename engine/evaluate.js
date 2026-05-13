@@ -1,6 +1,25 @@
 import { pieceValues, pieceSquareTables } from "./tables.js";
 
 export const evaluationMethods = {
+    evaluateBoard() {
+        if (this.evaluator === "NNUE_Evaluator") {
+            return this.evaluateBoardNNUE();
+        }
+
+        return this.evaluateBoardClassical();
+    },
+
+    evaluateBoardNNUE() {
+        let materialScore = 0;
+
+        for (const piece of this.board.getPieces()) {
+            const value = pieceValues[piece.type] || 0;
+            materialScore += piece.color === 0 ? value : -value;
+        }
+
+        return materialScore / 100;
+    },
+
     calculateGamePhase(totalMaterial) {
         // Tapered evaluation: phase goes from 1 (opening) to 0 (endgame)
         const maxMaterial = 3900; // Approximate max starting material

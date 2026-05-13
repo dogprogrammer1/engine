@@ -1,5 +1,5 @@
 import Board from "../board.js";
-import Engine from "./engine.js";
+import Engine, { ENGINE_EVALUATORS } from "./engine.js";
 
 self.addEventListener("message", event => {
   const message = event.data;
@@ -10,7 +10,11 @@ self.addEventListener("message", event => {
   try {
     const board = new Board(0, { silent: true });
     board.restoreState(message.state);
-    const workerEngine = new Engine(board, message.color);
+    const workerEngine = new Engine(
+      board,
+      message.color,
+      message.evaluator || ENGINE_EVALUATORS.CLASSICAL
+    );
 
     const bestMove = workerEngine.findBestMove(message.depth);
     self.postMessage({ type: "bestMove", bestMove });
