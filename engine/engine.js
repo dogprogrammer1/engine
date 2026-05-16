@@ -22,10 +22,6 @@ class Engine {
         this.initializeHash(); // Calculate initial hash
     }
 
-    updateBoard(board) {
-        this.board = board;
-    }
-
     normalizeEvaluator(evaluator) {
         return evaluator === ENGINE_EVALUATORS.NNUE
             ? ENGINE_EVALUATORS.NNUE

@@ -792,10 +792,6 @@ export default class Board {
         return `${ranks.join("/")} ${this.turn === WHITE ? "w" : "b"} ${castling} ${enPassant} 0 1`;
     }
 
-    moveToFEN() {
-        return this.toFEN();
-    }
-
     move(x1, y1, x2, y2, promotionType = QUEEN) {
         if (!this.isLegalMove(x1, y1, x2, y2)) {
             const piece = this.getPiece(x1, y1);

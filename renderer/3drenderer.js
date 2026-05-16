@@ -8,16 +8,6 @@
 
 import Quaternion from "./quaternion.js";
 
-// Piece type constants
-const PIECE_TYPES = {
-  PAWN: 0,
-  BISHOP: 1,
-  KNIGHT: 2,
-  ROOK: 3,
-  QUEEN: 4,
-  KING: 5
-};
-
 
 class Transform {
   /**
@@ -120,10 +110,6 @@ class Piece3D {
   getEdges() {
     // Override in subclasses
     return [];
-  }
-
-  draw(ctx, camera, focal, cx, cy, nearPlane) {
-    // Override in subclasses
   }
 }
 
@@ -431,11 +417,7 @@ export default class Renderer3D {
 
     // Event listeners
     window.addEventListener("resize", () => this.resizeCanvas());
-    window.addEventListener("mousemove", (e) => this.onMouseMove(e));
     window.addEventListener("click", (e) => this.onMouseClick(e));
-
-    // Start animation loop
-    this.startAnimationLoop();
   }
 
   resizeCanvas() {
@@ -615,8 +597,6 @@ export default class Renderer3D {
       const allBehind = camPoints.every(p => p[2] <= this.nearPlane);
       if (allBehind) continue;
 
-      const projPoints = camPoints.map(p => this.projectCameraSpace(p));
-
       // Draw edges
       this.ctx.strokeStyle = piece.color === 0 ? "#eee" : "#333";
       this.ctx.lineWidth = 2;
@@ -669,10 +649,6 @@ export default class Renderer3D {
     };
   }
 
-  onMouseMove(e) {
-    // Can be used for highlighting squares
-  }
-
   onMouseClick(e) {
     // Calculate click position in world space using ray casting
     const mouseX = e.clientX;
@@ -689,9 +665,6 @@ export default class Renderer3D {
   }
 
   raycastBoard(mouseX, mouseY) {
-    const centerX = this.canvas.width / 2;
-    const centerY = this.canvas.height / 2;
-
     const closestSquare = { square: null, distance: Infinity };
 
     for (const square of this.boardSquares) {
@@ -715,13 +688,5 @@ export default class Renderer3D {
     }
 
     return closestSquare.square;
-  }
-
-  startAnimationLoop() {
-    const loop = () => {
-      // Rendering is driven by the active page bootstrap.
-      requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
   }
 }

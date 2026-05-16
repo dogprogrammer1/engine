@@ -2,8 +2,6 @@ import {
     BOARD_SIZE,
     CANVAS_SIZE,
     PIECE_FONT,
-    PIECE_OFFSET_X,
-    PIECE_OFFSET_Y,
     PIECE_SYMBOLS,
     SQUARE_SIZE
 } from "../ui-constants.js";
