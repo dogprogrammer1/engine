@@ -57,28 +57,22 @@
 
         let game;
 
-        function initializeGame() {
+        function getPlayerColorForMode(mode) {
+            return mode === "manualBlack" || mode === "manualNNUEBlack" ? 1 : 0;
+        }
+
+        function initializeGame(mode = gameModeSelect.value) {
             if (game) {
                 game.destroy();
             }
 
-            game = new Game(renderer, 0, evalDisplay, sideDisplay);
-            game.draw();
-            game.startAutoPlay();
-        }
+            game = new Game(
+                renderer,
+                getPlayerColorForMode(mode),
+                evalDisplay,
+                sideDisplay
+            );
 
-        // Initialize game on load
-        initializeGame();
-
-        // Handle new game button
-        newGameBtn.addEventListener("click", () => {
-            initializeGame();
-        });
-
-        //Handle gamemode select change
-        gameModeSelect.addEventListener("change", () => {
-            const mode = gameModeSelect.value;
-            initializeGame();
             if (mode === "auto") {
                 game.startAutoPlay();
             } else if (mode === "manual") {
@@ -90,9 +84,20 @@
             } else if (mode === "manualNNUEBlack") {
                 game.startManualPlay("black", "nnue");
             }
+
+            game.draw();
+        }
+
+        initializeGame(gameModeSelect.value);
+
+        newGameBtn.addEventListener("click", () => {
+            initializeGame(gameModeSelect.value);
         });
 
-        // Handle canvas clicks
+        gameModeSelect.addEventListener("change", () => {
+            initializeGame(gameModeSelect.value);
+        });
+
         canvas.addEventListener("click", (event) => {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;

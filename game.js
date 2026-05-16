@@ -1,8 +1,9 @@
 import Board from "./board.js";
 const WHITE = 0;
 const BLACK = 1;
+const HUMAN_LABEL = "Human";
 
-const BOT_CONFIGS = {
+const DEFAULT_BOT_CONFIGS = {
     [WHITE]: {
         label: "Classical",
         evaluator: "classical",
@@ -44,27 +45,61 @@ export default class Game {
             [WHITE]: null,
             [BLACK]: null
         };
+        this.humanColor = null;
+        this.botConfigs = this.cloneBotConfigs(DEFAULT_BOT_CONFIGS);
 
-        this.engineWorker = new Worker(new URL("./engine/engineWorker.js", import.meta.url), {
+        this.engineWorker = this.createEngineWorker();
+    }
+
+    createEngineWorker() {
+        const worker = new Worker(new URL("./engine/engineWorker.js", import.meta.url), {
             type: "module"
         });
 
-        this.engineWorker.onmessage = event => this.handleEngineWorkerMessage(event.data);
-        this.engineWorker.onerror = event => {
+        worker.onmessage = event => this.handleEngineWorkerMessage(event.data);
+        worker.onerror = event => {
             console.error("Engine worker error:", event);
             this.engineThinking = false;
             this.draw();
         };
+
+        return worker;
+    }
+
+    cloneBotConfigs(configs) {
+        return {
+            [WHITE]: configs[WHITE] ? { ...configs[WHITE] } : null,
+            [BLACK]: configs[BLACK] ? { ...configs[BLACK] } : null
+        };
+    }
+
+    isEngineControlled(color) {
+        return Boolean(this.botConfigs[color]);
+    }
+
+    currentHumanColor() {
+        return this.humanColor;
+    }
+
+    clearMoveTimer() {
+        if (!this.moveTimer) {
+            return;
+        }
+
+        clearTimeout(this.moveTimer);
+        this.moveTimer = null;
     }
 
     click(x, y) {
-        // Don't allow clicks during engine move or if not player's turn
-        if (this.engineThinking || this.board.turn !== this.playerColor) {
+        const humanColor = this.currentHumanColor();
+
+        // Ignore clicks unless this side is controlled by a human player.
+        if (humanColor === null || this.engineThinking || this.board.turn !== humanColor) {
             return;
         }
  
         if (!this.selected) {
-            if (this.board.getPiece(x, y)[1] !== -1 && this.board.getPiece(x, y)[0] === this.playerColor) {
+            if (this.board.getPiece(x, y)[1] !== -1 && this.board.getPiece(x, y)[0] === humanColor) {
                 this.selected = true;
                 this.selX = x;
                 this.selY = y;
@@ -74,7 +109,7 @@ export default class Game {
  
             if (x === this.selX && y === this.selY) {
                 this.clearSelection();
-            } else if (clickedPiece[0] === this.playerColor) {
+            } else if (clickedPiece[0] === humanColor) {
                 this.selX = x;
                 this.selY = y;
             } else if (this.board.move(this.selX, this.selY, x, y)) {
@@ -86,9 +121,8 @@ export default class Game {
                     return;
                 }
  
-                // If it's now the engine's turn, make a move after a delay
-                if (this.board.turn !== this.playerColor) {
-                    setTimeout(() => this.makeEngineMove(), 500);
+                if (this.isEngineControlled(this.board.turn)) {
+                    this.scheduleNextMove(500);
                 }
             }
         }
@@ -109,7 +143,10 @@ export default class Game {
         }
 
         const sideToMove = this.board.turn;
-        const botConfig = BOT_CONFIGS[sideToMove];
+        const botConfig = this.botConfigs[sideToMove];
+        if (!botConfig) {
+            return;
+        }
 
         this.engineThinking = true;
         this.draw();
@@ -151,7 +188,7 @@ export default class Game {
         if (bestMove) {
             const moveResult = this.board.move(bestMove.x1, bestMove.y1, bestMove.x2, bestMove.y2);
             console.log(
-                `${COLOR_NAMES[data.color]} (${BOT_CONFIGS[data.color].label}) move: ` +
+                `${COLOR_NAMES[data.color]} (${this.botConfigs[data.color]?.label ?? HUMAN_LABEL}) move: ` +
                 `(${bestMove.x1},${bestMove.y1}) -> (${bestMove.x2},${bestMove.y2}), success=${moveResult}, ` +
                 `time=${data.elapsedMs.toFixed(1)}ms, nodes=${data.nodesEvaluated}, ` +
                 `evals=${data.evalCount}, evalTime=${data.evalTimeMs.toFixed(1)}ms, ` +
@@ -166,7 +203,11 @@ export default class Game {
             }
 
             this.engineThinking = false;
-            this.scheduleNextMove();
+            if (this.isEngineControlled(this.board.turn)) {
+                this.scheduleNextMove();
+            } else {
+                this.draw();
+            }
             return;
         } else {
             console.log("No legal moves available");
@@ -177,9 +218,7 @@ export default class Game {
     }
 
     scheduleNextMove(delay = 350) {
-        if (this.moveTimer) {
-            clearTimeout(this.moveTimer);
-        }
+        this.clearMoveTimer();
 
         this.moveTimer = setTimeout(() => {
             this.moveTimer = null;
@@ -188,22 +227,45 @@ export default class Game {
     }
 
     startAutoPlay() {
+        this.clearMoveTimer();
+        this.clearSelection();
+        this.engineThinking = false;
+        this.humanColor = null;
+        this.botConfigs = this.cloneBotConfigs(DEFAULT_BOT_CONFIGS);
+        this.draw();
         this.scheduleNextMove(350);
     }
 
     destroy() {
-        if (this.moveTimer) {
-            clearTimeout(this.moveTimer);
-            this.moveTimer = null;
-        }
+        this.clearMoveTimer();
 
         this.engineWorker.terminate();
     }
 
-    startManualPlay() {
-        this.destroy();
+    startManualPlay(playerSide = "white", evaluator = "classical") {
+        const humanColor = playerSide === "black" ? BLACK : WHITE;
+        const engineColor = humanColor === WHITE ? BLACK : WHITE;
+        const engineEvaluator = evaluator === "nnue" ? "NNUE_Evaluator" : "classical";
+
+        this.clearMoveTimer();
         this.clearSelection();
-    
+        this.engineThinking = false;
+        this.humanColor = humanColor;
+        this.botConfigs = {
+            [WHITE]: null,
+            [BLACK]: null
+        };
+        this.botConfigs[engineColor] = {
+            label: evaluatorLabel(engineEvaluator),
+            evaluator: engineEvaluator,
+            depth: 4
+        };
+
+        this.draw();
+
+        if (this.isEngineControlled(this.board.turn)) {
+            this.scheduleNextMove(350);
+        }
     }
 
     selection() {
@@ -225,13 +287,19 @@ export default class Game {
         const sideToMove = COLOR_NAMES[this.board.turn];
         const currentBot =
             evaluatorLabel(this.lastSearchStats[this.board.turn]?.evaluator) ||
-            BOT_CONFIGS[this.board.turn].label;
+            (this.isEngineControlled(this.board.turn)
+                ? this.botConfigs[this.board.turn].label
+                : HUMAN_LABEL);
         const whiteStats = this.lastSearchStats[WHITE];
         const blackStats = this.lastSearchStats[BLACK];
         const whiteTime = whiteStats ? `${whiteStats.elapsedMs.toFixed(1)}ms` : "--";
         const blackTime = blackStats ? `${blackStats.elapsedMs.toFixed(1)}ms` : "--";
-        const whiteLabel = whiteStats ? evaluatorLabel(whiteStats.evaluator) : BOT_CONFIGS[WHITE].label;
-        const blackLabel = blackStats ? evaluatorLabel(blackStats.evaluator) : BOT_CONFIGS[BLACK].label;
+        const whiteLabel = whiteStats
+            ? evaluatorLabel(whiteStats.evaluator)
+            : (this.botConfigs[WHITE]?.label ?? HUMAN_LABEL);
+        const blackLabel = blackStats
+            ? evaluatorLabel(blackStats.evaluator)
+            : (this.botConfigs[BLACK]?.label ?? HUMAN_LABEL);
 
         this.evalDisplay.textContent =
             `Turn: ${sideToMove} (${currentBot}) | Last think times - White: ${whiteTime}, Black: ${blackTime}`;
