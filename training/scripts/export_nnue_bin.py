@@ -4,14 +4,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
 import torch
 
 
-SUPPORTED_EXTRA_FEATURE_LAYOUTS = {
-    "stm_castling_ep": 14,
-}
+EXTRA_FEATURE_LAYOUT = "stm_castling_ep"
+EXTRA_FEATURE_COUNT = 14
 PIECE_FEATURES_PER_KING = 10 * 64
-LEGACY_FEATURE_STRIDE = 1 + PIECE_FEATURES_PER_KING
 
 
 def load_checkpoint(checkpoint_path):
@@ -58,46 +57,15 @@ def default_binary_path(manifest_path):
     return manifest_path.with_name("nnue_weights.bin")
 
 
-def infer_feature_stride(feature_count):
-    if feature_count % 64 != 0:
-        raise ValueError(f"feature_count={feature_count} is not divisible by 64 king buckets")
-
-    feature_stride = feature_count // 64
-    if feature_stride not in (PIECE_FEATURES_PER_KING, LEGACY_FEATURE_STRIDE):
-        raise ValueError(f"Unsupported NNUE feature stride: {feature_stride}")
-
-    return feature_stride
-
-
 def project_embeddings(embedding, fc1_weight, hidden_size):
     embedding_f32 = embedding.detach().cpu().to(torch.float32)
     fc1_weight_f32 = fc1_weight.detach().cpu().to(torch.float32)
 
-    us_projection = embedding_f32[:-1] @ fc1_weight_f32[:, :hidden_size].T
-    them_projection = embedding_f32[:-1] @ fc1_weight_f32[:, hidden_size:hidden_size * 2].T
-    extra_weight = fc1_weight_f32[:, hidden_size * 2:]
+    feature_us_projection = embedding_f32[:-1] @ fc1_weight_f32[:, :hidden_size].T
+    feature_them_projection = embedding_f32[:-1] @ fc1_weight_f32[:, hidden_size:hidden_size * 2].T
+    fc1_extra_weight = fc1_weight_f32[:, hidden_size * 2:]
 
-    return us_projection, them_projection, extra_weight
-
-
-def split_king_bias(projection, feature_stride):
-    _, fc1_out = projection.shape
-
-    if feature_stride == PIECE_FEATURES_PER_KING:
-        return torch.zeros((64, fc1_out), dtype=projection.dtype), projection
-
-    king_bias = projection.new_empty((64, fc1_out))
-    piece_projection = projection.new_empty((64 * PIECE_FEATURES_PER_KING, fc1_out))
-
-    for king_square in range(64):
-        legacy_start = king_square * feature_stride
-        piece_start = king_square * PIECE_FEATURES_PER_KING
-        king_bias[king_square] = projection[legacy_start]
-        piece_projection[piece_start:piece_start + PIECE_FEATURES_PER_KING] = (
-            projection[legacy_start + 1:legacy_start + feature_stride]
-        )
-
-    return king_bias, piece_projection
+    return feature_us_projection, feature_them_projection, fc1_extra_weight
 
 
 def write_tensor_blob(handle, tensor_map):
@@ -122,50 +90,40 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
     state_dict = extract_state_dict(checkpoint)
     model_config = extract_model_config(checkpoint)
 
-    architecture = "feature_embeddings"
-    if "accumulator.weight" in state_dict:
-        architecture = "accumulator"
-
-    embedding = get_tensor(
-        state_dict,
-        "feature_embeddings.weight",
-        "embedding.weight",
-        "accumulator.weight",
-    )
+    embedding = get_tensor(state_dict, "feature_embeddings.weight")
     fc1_weight = get_tensor(state_dict, "fc1.weight")
     fc1_bias = get_tensor(state_dict, "fc1.bias")
     fc2_weight = get_tensor(state_dict, "fc2.weight")
     fc2_bias = get_tensor(state_dict, "fc2.bias")
-    fc3_weight = get_tensor(state_dict, "fc3.weight", "output.weight")
-    fc3_bias = get_tensor(state_dict, "fc3.bias", "output.bias")
+    fc3_weight = get_tensor(state_dict, "fc3.weight")
+    fc3_bias = get_tensor(state_dict, "fc3.bias")
 
     embedding_rows, hidden_size = embedding.shape
-    source_feature_count = embedding_rows - 1
-    source_padding_index = source_feature_count
-    source_feature_stride = infer_feature_stride(source_feature_count)
+    feature_count = embedding_rows - 1
+    if feature_count != 64 * PIECE_FEATURES_PER_KING:
+        raise ValueError(f"Expected {64 * PIECE_FEATURES_PER_KING} NNUE features, got {feature_count}")
+
     fc1_out, fc1_in = fc1_weight.shape
     fc2_out, fc2_in = fc2_weight.shape
     fc3_out, fc3_in = fc3_weight.shape
     base_input_size = hidden_size * 2
     extra_input_count = fc1_in - base_input_size
     extra_feature_layout = model_config.get("extra_feature_layout")
-    layout_is_supported = (
-        extra_feature_layout in SUPPORTED_EXTRA_FEATURE_LAYOUTS
-        and SUPPORTED_EXTRA_FEATURE_LAYOUTS[extra_feature_layout] == extra_input_count
-    )
-    runtime_compatible = architecture == "feature_embeddings" and (
-        extra_input_count == 0 or layout_is_supported
-    )
+
+    if extra_input_count not in (0, EXTRA_FEATURE_COUNT):
+        raise ValueError(f"Unsupported extraInputCount={extra_input_count}")
+    if extra_input_count == EXTRA_FEATURE_COUNT and extra_feature_layout != EXTRA_FEATURE_LAYOUT:
+        raise ValueError(
+            f"Expected extra_feature_layout={EXTRA_FEATURE_LAYOUT}, got {extra_feature_layout}"
+        )
 
     feature_us_projection, feature_them_projection, fc1_extra_weight = project_embeddings(
         embedding,
         fc1_weight,
         hidden_size,
     )
-    king_us_bias, feature_us_projection = split_king_bias(feature_us_projection, source_feature_stride)
-    king_them_bias, feature_them_projection = split_king_bias(feature_them_projection, source_feature_stride)
-    feature_count = 64 * PIECE_FEATURES_PER_KING
-    padding_index = feature_count
+    king_us_bias = torch.zeros((64, fc1_out), dtype=torch.float32)
+    king_them_bias = torch.zeros((64, fc1_out), dtype=torch.float32)
 
     tensor_map = [
         ("kingUsBias", king_us_bias),
@@ -188,20 +146,13 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
 
     manifest = {
         "version": 2,
-        "architecture": architecture,
         "featureCount": feature_count,
-        "paddingIndex": padding_index,
-        "sourceFeatureCount": source_feature_count,
-        "sourcePaddingIndex": source_padding_index,
-        "sourceFeatureStride": source_feature_stride,
-        "featureStride": PIECE_FEATURES_PER_KING,
-        "pieceFeatureOffset": 0,
+        "paddingIndex": feature_count,
         "hiddenSize": hidden_size,
         "inputSize": fc1_in,
         "baseInputSize": base_input_size,
         "extraInputCount": extra_input_count,
         "extraFeatureLayout": extra_feature_layout,
-        "runtimeCompatible": runtime_compatible,
         "fc1Size": fc1_out,
         "fc2Size": fc2_out,
         "outputSize": fc3_out,
@@ -223,27 +174,15 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
 
     print(f"Exported NNUE manifest to {manifest_path}")
     print(f"Exported NNUE weights to {binary_path}")
-    print(f"architecture={architecture}")
     print(f"featureCount={feature_count}")
-    print(f"paddingIndex={padding_index}")
-    print(f"sourceFeatureCount={source_feature_count}")
-    print(f"sourceFeatureStride={source_feature_stride}")
     print(f"hiddenSize={hidden_size}")
     print(f"inputSize={fc1_in}")
     print(f"extraInputCount={extra_input_count}")
     print(f"extraFeatureLayout={extra_feature_layout}")
-    print(f"runtimeCompatible={runtime_compatible}")
     print(f"fc1={fc1_out}x{fc1_in}")
     print(f"fc2={fc2_out}x{fc2_in}")
     print(f"fc3={fc3_out}x{fc3_in}")
     print(f"totalBytes={total_bytes}")
-
-    if not runtime_compatible:
-        print(
-            "Warning: this checkpoint requires extra inputs beyond hiddenSize * 2. "
-            "The current JS runtime only supports feature_embeddings checkpoints "
-            "with extraInputCount=0 or a recognized extraFeatureLayout."
-        )
 
 
 def main():
@@ -267,9 +206,10 @@ def main():
 
     try:
         export_nnue_bin(Path(args.input), manifest_path, binary_path)
-    except (KeyError, ValueError) as e:
-        print(f"Export failed: {e}", file=sys.stderr)
+    except (KeyError, ValueError) as error:
+        print(f"Export failed: {error}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

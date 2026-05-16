@@ -21,7 +21,6 @@ NNUE_EXTRA_FEATURE_LAYOUT = "stm_castling_ep"
 NNUE_EXTRA_FEATURES = 14
 
 # Engine piece ids are P, B, N, R, Q, K while NNUE training buckets are P, N, B, R, Q.
-# Keep this mapping explicit so the bishop/knight order mismatch is intentional, not accidental.
 PIECE_TYPE = {
     "P": 0,
     "N": 1,
