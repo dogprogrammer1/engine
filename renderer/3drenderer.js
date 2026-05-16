@@ -719,7 +719,7 @@ export default class Renderer3D {
 
   startAnimationLoop() {
     const loop = () => {
-      // The draw method will be called from main.js game loop
+      // Rendering is driven by the active page bootstrap.
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);

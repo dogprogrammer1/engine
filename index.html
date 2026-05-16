@@ -35,6 +35,7 @@
     <canvas id="canvas" aria-label="Chess board"></canvas>
     <div id="sideDisplay" aria-live="polite">White: Classical | Black: NNUE_Evaluator</div>
     <div id="evalDisplay" aria-live="polite">Classical eval: 0.00</div>
+    <div id="rendererInfo" aria-live="polite"></div>
     <button id="newGameBtn" aria-label="Start a new game">Reset Game</button>
     <select id = "gameModeSelect" aria-label="Select game mode">
         <option value="auto">Auto Play</option>
@@ -45,17 +46,32 @@
     </select>
     <script type="module">
         import Game from "./game.js";
-        import Renderer from "./renderer/2drenderer.js";
+        import Renderer2D from "./renderer/2drenderer.js";
+        import Renderer3D from "./renderer/3drenderer.js";
         import { BOARD_SIZE, SQUARE_SIZE } from "./ui-constants.js";
+
+        const RENDERER_MODE = "3d";
+        const USE_3D_RENDERER = RENDERER_MODE === "3d";
 
         const canvas = document.getElementById("canvas");
         const newGameBtn = document.getElementById("newGameBtn");
         const evalDisplay = document.getElementById("evalDisplay");
         const sideDisplay = document.getElementById("sideDisplay");
+        const rendererInfo = document.getElementById("rendererInfo");
         const gameModeSelect = document.getElementById("gameModeSelect");
-        const renderer = new Renderer(canvas);
+        const renderer = USE_3D_RENDERER
+            ? new Renderer3D(canvas)
+            : new Renderer2D(canvas);
 
         let game;
+
+        if (USE_3D_RENDERER) {
+            document.body.style.display = "block";
+            document.body.style.overflow = "hidden";
+            rendererInfo.textContent = "3D controls: WASD move, arrows rotate, Space/Shift up/down.";
+        } else {
+            rendererInfo.textContent = "2D renderer active.";
+        }
 
         function getPlayerColorForMode(mode) {
             return mode === "manualBlack" || mode === "manualNNUEBlack" ? 1 : 0;
@@ -98,17 +114,31 @@
             initializeGame(gameModeSelect.value);
         });
 
-        canvas.addEventListener("click", (event) => {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const x = Math.floor(((event.clientX - rect.left) * scaleX) / SQUARE_SIZE);
-            const y = Math.floor(((event.clientY - rect.top) * scaleY) / SQUARE_SIZE);
-
-            if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+        if (USE_3D_RENDERER) {
+            canvas.addEventListener("boardClick", (event) => {
+                const { x, y } = event.detail;
                 game.click(x, y);
+            });
+
+            function renderLoop() {
+                game.draw();
+                requestAnimationFrame(renderLoop);
             }
-        });
+
+            renderLoop();
+        } else {
+            canvas.addEventListener("click", (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const x = Math.floor(((event.clientX - rect.left) * scaleX) / SQUARE_SIZE);
+                const y = Math.floor(((event.clientY - rect.top) * scaleY) / SQUARE_SIZE);
+
+                if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+                    game.click(x, y);
+                }
+            });
+        }
     </script>
 </body>
 </html>

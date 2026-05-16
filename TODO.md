@@ -1,2 +1,1 @@
-WE NEED TO ADD COMMENTS/DOC STRINGS
-LOWK GETTING CONFUSED WHILE TRYING TO MAKE THE CODE MORE EFFICIENT
+fix 3d renderer position and allow option switching in 3d renderer mode
