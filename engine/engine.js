@@ -17,6 +17,8 @@ class Engine {
         this.currentZobristHash = 0n; // Cache zobrist hash
         this.killerMoves = []; // Killer moves for move ordering
         this.nodesEvaluated = 0;
+        this.evalCount = 0;
+        this.evalTimeMs = 0;
         this.initializeHash(); // Calculate initial hash
     }
 

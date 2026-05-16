@@ -4,7 +4,9 @@ node_modules/
 training/datasets/
 training/models/nn/
 training/models/nnue/
-training/models/json_weights/
+training/models/weights/
+public/models/*.json
+public
 
 data/
 

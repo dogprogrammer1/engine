@@ -1,23 +1,24 @@
 import { pieceValues, pieceSquareTables } from "./tables.js";
+import { evaluateBoardWithDefaultNNUE, hasDefaultNNUEModel } from "./nnue.js";
 
 export const evaluationMethods = {
     evaluateBoard() {
-        if (this.evaluator === "NNUE_Evaluator") {
-            return this.evaluateBoardNNUE();
-        }
+        const start = performance.now();
+        const score = this.evaluator === "NNUE_Evaluator"
+            ? this.evaluateBoardNNUE()
+            : this.evaluateBoardClassical();
 
-        return this.evaluateBoardClassical();
+        this.evalCount++;
+        this.evalTimeMs += performance.now() - start;
+        return score;
     },
 
     evaluateBoardNNUE() {
-        let materialScore = 0;
-
-        for (const piece of this.board.getPieces()) {
-            const value = pieceValues[piece.type] || 0;
-            materialScore += piece.color === 0 ? value : -value;
+        if (hasDefaultNNUEModel()) {
+            return evaluateBoardWithDefaultNNUE(this.board);
         }
 
-        return materialScore / 100;
+        return this.evaluateBoardClassical();
     },
 
     calculateGamePhase(totalMaterial) {

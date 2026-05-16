@@ -1,4 +1,9 @@
 import Engine from "./engine/engine.js";
+import {
+    applyMoveToBoardNNUE,
+    invalidateBoardNNUE,
+    unmakeMoveToBoardNNUE
+} from "./engine/nnue.js";
 class Llong {
     constructor(x = 0n) {
         this.val = x;
@@ -54,6 +59,7 @@ export default class Board {
     }
 
     reset() {
+        this._nnueRuntime = null;
         this.board = [
             [
                 new Llong(0x00FF000000000000n),
@@ -155,6 +161,8 @@ export default class Board {
                 }
             }
         }
+
+        invalidateBoardNNUE(this);
     }
 
     getPiece(x, y) {
@@ -488,6 +496,7 @@ export default class Board {
             this.halfmoveClock++;
         }
 
+        applyMoveToBoardNNUE(this, undo);
         return undo;
     }
 
@@ -528,6 +537,7 @@ export default class Board {
         this.turn = undo.turn;
         this.halfmoveClock = undo.halfmoveClock;
         this.gameResult = undo.gameResult;
+        unmakeMoveToBoardNNUE(this, undo);
     }
 
     rawMove(x1, y1, x2, y2) {

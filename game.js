@@ -20,6 +20,14 @@ const COLOR_NAMES = {
     [BLACK]: "Black"
 };
 
+function evaluatorLabel(evaluator) {
+    if (!evaluator) {
+        return null;
+    }
+
+    return evaluator === "NNUE_Evaluator" ? "NNUE_Evaluator" : "Classical";
+}
+
 export default class Game {
     constructor(renderer, playerColor = 0, evalDisplay = null, sideDisplay = null) {
         this.playerColor = playerColor;
@@ -129,15 +137,25 @@ export default class Game {
         this.lastSearchStats[data.color] = {
             elapsedMs: data.elapsedMs,
             nodesEvaluated: data.nodesEvaluated,
-            evaluator: data.evaluator
+            evalCount: data.evalCount,
+            evalTimeMs: data.evalTimeMs,
+            evaluator: data.evaluator,
+            requestedEvaluator: data.requestedEvaluator,
+            warning: data.warning || null
         };
+
+        if (data.warning) {
+            console.warn(data.warning);
+        }
 
         if (bestMove) {
             const moveResult = this.board.move(bestMove.x1, bestMove.y1, bestMove.x2, bestMove.y2);
             console.log(
                 `${COLOR_NAMES[data.color]} (${BOT_CONFIGS[data.color].label}) move: ` +
                 `(${bestMove.x1},${bestMove.y1}) -> (${bestMove.x2},${bestMove.y2}), success=${moveResult}, ` +
-                `time=${data.elapsedMs.toFixed(1)}ms, nodes=${data.nodesEvaluated}`
+                `time=${data.elapsedMs.toFixed(1)}ms, nodes=${data.nodesEvaluated}, ` +
+                `evals=${data.evalCount}, evalTime=${data.evalTimeMs.toFixed(1)}ms, ` +
+                `avgEval=${data.evalCount ? (data.evalTimeMs / data.evalCount).toFixed(4) : "0.0000"}ms`
             );
 
             if (this.board.gameResult?.over) {
@@ -205,11 +223,15 @@ export default class Game {
         if (!this.evalDisplay) return;
 
         const sideToMove = COLOR_NAMES[this.board.turn];
-        const currentBot = BOT_CONFIGS[this.board.turn].label;
+        const currentBot =
+            evaluatorLabel(this.lastSearchStats[this.board.turn]?.evaluator) ||
+            BOT_CONFIGS[this.board.turn].label;
         const whiteStats = this.lastSearchStats[WHITE];
         const blackStats = this.lastSearchStats[BLACK];
         const whiteTime = whiteStats ? `${whiteStats.elapsedMs.toFixed(1)}ms` : "--";
         const blackTime = blackStats ? `${blackStats.elapsedMs.toFixed(1)}ms` : "--";
+        const whiteLabel = whiteStats ? evaluatorLabel(whiteStats.evaluator) : BOT_CONFIGS[WHITE].label;
+        const blackLabel = blackStats ? evaluatorLabel(blackStats.evaluator) : BOT_CONFIGS[BLACK].label;
 
         this.evalDisplay.textContent =
             `Turn: ${sideToMove} (${currentBot}) | Last think times - White: ${whiteTime}, Black: ${blackTime}`;
@@ -227,7 +249,7 @@ export default class Game {
             }
 
             this.sideDisplay.textContent =
-                `White: ${BOT_CONFIGS[WHITE].label} | Black: ${BOT_CONFIGS[BLACK].label}${gameStatus}`;
+                `White: ${whiteLabel} | Black: ${blackLabel}${gameStatus}`;
         }
     }
 }
