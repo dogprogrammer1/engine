@@ -15,11 +15,13 @@ PIECE_TO_PLANE = {
     "k": 11,
 }
 
-NNUE_SQUARES = 1 + 10 * 64
+NNUE_SQUARES = 10 * 64
 NNUE_FEATURES = 64 * NNUE_SQUARES
 NNUE_EXTRA_FEATURE_LAYOUT = "stm_castling_ep"
 NNUE_EXTRA_FEATURES = 14
 
+# Engine piece ids are P, B, N, R, Q, K while NNUE training buckets are P, N, B, R, Q.
+# Keep this mapping explicit so the bishop/knight order mismatch is intentional, not accidental.
 PIECE_TYPE = {
     "P": 0,
     "N": 1,
@@ -125,8 +127,8 @@ def _feature_index(piece, square, king, perspective):
     if not own_piece:
         piece_type += 5
         
-    feature = 1 + piece_type * 64 + square
-    
+    feature = piece_type * 64 + square
+
     return king * NNUE_SQUARES + feature
 
 
@@ -146,7 +148,7 @@ def _encode_one_side(board, perspective):
     else:
         king_in_perspective = king_square
     
-    indices = [king_in_perspective * NNUE_SQUARES]
+    indices = []
     
     for square, piece in board.items():
         i = _feature_index(piece, square, king_square, perspective)

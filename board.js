@@ -51,6 +51,12 @@ const WHITE_QUEENSIDE = 1;
 const BLACK_KINGSIDE = 2;
 const BLACK_QUEENSIDE = 3;
 
+function normalizePromotionType(type) {
+    return type === BISHOP || type === KNIGHT || type === ROOK || type === QUEEN
+        ? type
+        : QUEEN;
+}
+
 export default class Board {
     constructor(color, options = {}) {
         this.playerColor = color;
@@ -395,7 +401,7 @@ export default class Board {
         return false;
     }
 
-    makeMove(x1, y1, x2, y2) {
+    makeMove(x1, y1, x2, y2, promotionType = QUEEN) {
         const [color, type] = this.getPiece(x1, y1);
         const enemy = this.opponent(color);
         const targetCode = this.getPieceCode(x2, y2);
@@ -414,7 +420,8 @@ export default class Board {
             gameResult: this.gameResult,
             rookMove: null,
             enPassantCapture: null,
-            promotion: false
+            promotion: false,
+            promotionType: null
         };
 
         if (targetCode !== EMPTY) {
@@ -458,10 +465,12 @@ export default class Board {
         }
 
         if (type === PAWN && (y2 === 7 || y2 === 0)) {
+            const promotedType = normalizePromotionType(promotionType);
             this.board[color][PAWN].clear(x2, y2);
-            this.board[color][QUEEN].set(x2, y2);
-            this.setPieceCode(x2, y2, color * 6 + QUEEN);
+            this.board[color][promotedType].set(x2, y2);
+            this.setPieceCode(x2, y2, color * 6 + promotedType);
             undo.promotion = true;
+            undo.promotionType = promotedType;
         }
 
         this.enPassant = [-1, -1];
@@ -504,7 +513,7 @@ export default class Board {
         const { x1, y1, x2, y2, color, type, targetCode } = undo;
 
         if (undo.promotion) {
-            this.board[color][QUEEN].clear(x2, y2);
+            this.board[color][undo.promotionType ?? QUEEN].clear(x2, y2);
             this.board[color][PAWN].set(x1, y1);
             this.setPieceCode(x1, y1, color * 6 + PAWN);
         } else {
@@ -540,8 +549,8 @@ export default class Board {
         unmakeMoveToBoardNNUE(this, undo);
     }
 
-    rawMove(x1, y1, x2, y2) {
-        return this.makeMove(x1, y1, x2, y2);
+    rawMove(x1, y1, x2, y2, promotionType = QUEEN) {
+        return this.makeMove(x1, y1, x2, y2, promotionType);
     }
 
     cloneState() {
@@ -787,14 +796,14 @@ export default class Board {
         return this.toFEN();
     }
 
-    move(x1, y1, x2, y2) {
+    move(x1, y1, x2, y2, promotionType = QUEEN) {
         if (!this.isLegalMove(x1, y1, x2, y2)) {
             const piece = this.getPiece(x1, y1);
             console.log(`Move rejected: (${x1},${y1}) -> (${x2},${y2}). Piece at start: [${piece[0]}, ${piece[1]}], turn: ${this.turn}`);
             return false;
         }
 
-        this.makeMove(x1, y1, x2, y2);
+        this.makeMove(x1, y1, x2, y2, promotionType);
         this.turn = 1 - this.turn;
         this.moveHistory.push(this.toFEN());
         
