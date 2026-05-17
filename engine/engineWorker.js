@@ -1,6 +1,6 @@
 import Board from "../board.js";
 import Engine, { ENGINE_EVALUATORS } from "./engine.js";
-import { loadDefaultNNUEModel } from "./nnue_evaluator.js";
+import { loadNNUEModel } from "./nnue/nnue_evaluator.js";
 
 async function resolveEvaluator(requestedEvaluator) {
   if (requestedEvaluator !== ENGINE_EVALUATORS.NNUE) {
@@ -11,7 +11,7 @@ async function resolveEvaluator(requestedEvaluator) {
   }
 
   try {
-    await loadDefaultNNUEModel();
+    await loadNNUEModel();
     return {
       evaluator: ENGINE_EVALUATORS.NNUE,
       warning: null
