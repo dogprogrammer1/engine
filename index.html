@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Chess Engine</title>
     <style>
+        :root {
+            color-scheme: dark;
+            font-family: Arial, sans-serif;
+        }
+
         body {
             margin: 0;
-            display: grid;
-            place-items: center;
             min-height: 100vh;
             background: #111;
+            color: white;
+            overflow: hidden;
         }
 
         canvas {
@@ -18,32 +23,78 @@
             cursor: pointer;
         }
 
-        #evalDisplay {
-            color: white;
-            font: 12px Arial, sans-serif;
-            margin-top: 6px;
+        #app {
+            position: relative;
+            min-height: 100vh;
         }
 
-        #sideDisplay {
-            color: white;
+        #hud {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: min(420px, calc(100vw - 32px));
+            padding: 12px;
+            background: rgba(15, 15, 15, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        #controls button,
+        #controls select {
             font: 12px Arial, sans-serif;
-            margin-top: 6px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: #202020;
+            color: white;
+        }
+
+        #statusPanel {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font: 12px Arial, sans-serif;
+        }
+
+        #statusPanel > div {
+            line-height: 1.4;
+            word-break: break-word;
         }
     </style>
 </head>
 <body>
-    <canvas id="canvas" aria-label="Chess board"></canvas>
-    <div id="sideDisplay" aria-live="polite">White: Classical | Black: NNUE_Evaluator</div>
-    <div id="evalDisplay" aria-live="polite">Classical eval: 0.00</div>
-    <div id="rendererInfo" aria-live="polite"></div>
-    <button id="newGameBtn" aria-label="Start a new game">Reset Game</button>
-    <select id = "gameModeSelect" aria-label="Select game mode">
-        <option value="auto">Auto Play</option>
-        <option value="manual">Manual play as white against classical</option>
-        <option value="manualBlack">Manual play as black against classical</option>
-        <option value="manualNNUEWhite">Manual play as white against NNUE</option>
-        <option value="manualNNUEBlack">Manual play as black against NNUE</option>
-    </select>
+    <div id="app">
+        <canvas id="canvas" aria-label="Chess board"></canvas>
+        <div id="hud">
+            <div id="controls">
+                <button id="newGameBtn" aria-label="Start a new game">Reset Game</button>
+                <select id="gameModeSelect" aria-label="Select game mode">
+                    <option value="auto">Auto Play</option>
+                    <option value="manual">Manual play as white against classical</option>
+                    <option value="manualBlack">Manual play as black against classical</option>
+                    <option value="manualNNUEWhite">Manual play as white against NNUE</option>
+                    <option value="manualNNUEBlack">Manual play as black against NNUE</option>
+                </select>
+            </div>
+            <div id="statusPanel">
+                <div id="sideDisplay" aria-live="polite">White: Classical | Black: NNUE_Evaluator</div>
+                <div id="evalDisplay" aria-live="polite">Classical eval: 0.00</div>
+                <div id="rendererInfo" aria-live="polite"></div>
+            </div>
+        </div>
+    </div>
     <script type="module">
         import Game from "./game.js";
         import Renderer2D from "./renderer/2drenderer.js";
@@ -65,13 +116,9 @@
 
         let game;
 
-        if (USE_3D_RENDERER) {
-            document.body.style.display = "block";
-            document.body.style.overflow = "hidden";
-            rendererInfo.textContent = "3D controls: WASD move, arrows rotate, Space/Shift up/down.";
-        } else {
-            rendererInfo.textContent = "2D renderer active.";
-        }
+        rendererInfo.textContent = USE_3D_RENDERER
+            ? "3D controls: WASD move, arrows rotate, Space/Shift up/down."
+            : "2D renderer active.";
 
         function getPlayerColorForMode(mode) {
             return mode === "manualBlack" || mode === "manualNNUEBlack" ? 1 : 0;
