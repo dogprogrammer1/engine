@@ -109,14 +109,16 @@ class NNUENet(nn.Module):
         }
 
 
+# Pretty straight forward split the dataset and wrap it in dataloaders which handle batching and shuffling
 def make_loaders():
     df = load_rows(DATA_PATH, limit=ROW_LIMIT, min_depth=MIN_DEPTH)
     dataset = NNUEChessDataset(df)
-    total_rows = len(dataset)
 
+    total_rows = len(dataset)
     train_size = int(0.9 * total_rows)
     validation_size = total_rows - train_size
-    split_generator = torch.Generator().manual_seed(0)
+
+    split_generator = torch.Generator().manual_seed(0) # manual seed for reproducibility
     train_dataset, validation_dataset = random_split(
         dataset,
         [train_size, validation_size],
@@ -126,42 +128,46 @@ def make_loaders():
     print(f"{total_rows} rows after depth >= {MIN_DEPTH} filtering")
     print(f"Train rows: {train_size} and Val rows: {validation_size}")
 
-    common_loader_kwargs = {
-        "batch_size": BATCH_SIZE,
-        "collate_fn": add_padding,
-        "pin_memory": DEVICE.type == "cuda",
-    }
-
     train_loader = DataLoader(
         train_dataset,
         shuffle=True,
-        **common_loader_kwargs,
+        batch_size: BATCH_SIZE,
+        collate_fn: add_padding,
+        pin_memory: DEVICE.type == "cuda",
     )
     validation_loader = DataLoader(
         validation_dataset,
         shuffle=False,
-        **common_loader_kwargs,
+        batch_size: BATCH_SIZE,
+        collate_fn: add_padding,
+        pin_memory: DEVICE.type == "cuda",
     )
 
     return train_loader, validation_loader
 
-
+# trains one epoch lol
 def train_one_epoch(model, loader, optimizer, loss_fn, mse_fn):
     model.train()
     total_loss = 0.0
+
+    # mse is mean squared error which is bigger the worse the prediction is
+    # only used for logging
     total_mse = 0.0
 
     for us, them, extra_features, targets in loader:
+
+        # moves data to device
         us = us.to(DEVICE)
         them = them.to(DEVICE)
         extra_features = extra_features.to(DEVICE)
         targets = targets.to(DEVICE).unsqueeze(1)
 
-        optimizer.zero_grad(set_to_none=True)
+
+        optimizer.zero_grad(set_to_none=True) # clear old gradients
         predictions = model(us, them, extra_features)
         loss = loss_fn(predictions, targets)
         loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
+        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM) # prevents gradients from exploding
         optimizer.step()
 
         total_loss += loss.item()
@@ -169,7 +175,7 @@ def train_one_epoch(model, loader, optimizer, loss_fn, mse_fn):
 
     return total_loss / len(loader), total_mse / len(loader)
 
-
+# similar to train_one_epoch but it doesn't update weights
 def validate(model, loader, loss_fn, mse_fn):
     model.eval()
     total_loss = 0.0
@@ -188,7 +194,7 @@ def validate(model, loader, loss_fn, mse_fn):
 
     return total_loss / len(loader), total_mse / len(loader)
 
-
+# saves the model to the model path with a bunch of meta deta
 def save_checkpoint(model, optimizer, epoch, val_loss, val_mse):
     checkpoint = {
         "model_state_dict": model.state_dict(),
@@ -217,6 +223,7 @@ def save_checkpoint(model, optimizer, epoch, val_loss, val_mse):
 def main():
     NNUE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+    # just some logging to know
     print(f"Training NNUE on {DEVICE}")
     print(
         f"Config: rows={ROW_LIMIT}, min_depth={MIN_DEPTH}, batch={BATCH_SIZE}, "
@@ -233,7 +240,9 @@ def main():
         mode="min",
         factor=0.5,
         patience=LR_PATIENCE,
-    )
+    ) # scheduler updates the optimizer's learning rate over time
+
+    # diff between huber and mse is that huber is less sensitive to outliers
     loss_fn = nn.SmoothL1Loss(beta=0.20)
     mse_fn = nn.MSELoss()
     best_val_mse = float("inf")
@@ -246,8 +255,8 @@ def main():
         current_lr = optimizer.param_groups[0]["lr"]
         print(
             f"Epoch {epoch + 1}/{EPOCHS} - "
-            f"Train Huber: {train_loss:.4f} - Train MSE: {train_mse:.4f} - "
-            f"Val Huber: {val_loss:.4f} - Val MSE: {val_mse:.4f} - "
+            f"Train Loss: {train_loss:.4f} - Train MSE: {train_mse:.4f} - "
+            f"Val Loss: {val_loss:.4f} - Val MSE: {val_mse:.4f} - "
             f"LR: {current_lr:.6f}"
         )
 

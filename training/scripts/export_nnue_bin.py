@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse
 import json
 import sys
@@ -8,37 +6,25 @@ from pathlib import Path
 import torch
 
 
-EXTRA_FEATURE_LAYOUT = "stm_castling_ep"
 EXTRA_FEATURE_COUNT = 14
 PIECE_FEATURES_PER_KING = 10 * 64
 
+INPUT_PATH = Path("training/models/nnue/best_1000krows_12epochs_h256_head128x64_stm_castling_ep.pth")
+MANIFEST_PATH = Path("training/models/weights/nnue_manifest.json")
+BINARY_PATH = Path("training/models/weights/nnue_weights.bin")
 
 def load_checkpoint(checkpoint_path):
     return torch.load(checkpoint_path, map_location="cpu")
 
-
+# pulls out the actual model weights dictionary from the checkpoint
 def extract_state_dict(checkpoint):
-    if isinstance(checkpoint, torch.nn.Module):
-        return checkpoint.state_dict()
+    return checkpoint["model_state_dict"]
 
-    if isinstance(checkpoint, dict):
-        if "state_dict" in checkpoint:
-            return checkpoint["state_dict"]
-        if "model_state_dict" in checkpoint:
-            return checkpoint["model_state_dict"]
-
-    return checkpoint
-
-
+# pulls the model metadata
 def extract_model_config(checkpoint):
-    if isinstance(checkpoint, dict):
-        model_config = checkpoint.get("model_config")
-        if isinstance(model_config, dict):
-            return model_config
+    return checkpoint["model_config"]
 
-    return {}
-
-
+# returns the tensor for the first key that exists in the state dict and returns an error if not found
 def get_tensor(state_dict, *keys):
     for key in keys:
         if key in state_dict:
@@ -48,22 +34,19 @@ def get_tensor(state_dict, *keys):
     expected = ", ".join(keys)
     raise KeyError(f"Missing tensor. Expected one of: {expected}. Available keys: {available}")
 
-
-def flatten_tensor_f32(tensor):
+# converts a tensor to a flat list of python floats
+def flatten_tensor(tensor):
     return tensor.detach().cpu().contiguous().reshape(-1).to(torch.float32).numpy()
 
-
-def default_binary_path(manifest_path):
-    return manifest_path.with_name("nnue_weights.bin")
-
-
+# it puts both tensors on cpu and converts them to float32
+# then it precomputes the projection from the embedding to the first layer
 def project_embeddings(embedding, fc1_weight, hidden_size):
-    embedding_f32 = embedding.detach().cpu().to(torch.float32)
-    fc1_weight_f32 = fc1_weight.detach().cpu().to(torch.float32)
+    embedding_float = embedding.detach().cpu().to(torch.float32)
+    fc1_weight_float = fc1_weight.detach().cpu().to(torch.float32)
 
-    feature_us_projection = embedding_f32[:-1] @ fc1_weight_f32[:, :hidden_size].T
-    feature_them_projection = embedding_f32[:-1] @ fc1_weight_f32[:, hidden_size:hidden_size * 2].T
-    fc1_extra_weight = fc1_weight_f32[:, hidden_size * 2:]
+    feature_us_projection = embedding_float[:-1] @ fc1_weight_float[:, :hidden_size].T
+    feature_them_projection = embedding_float[:-1] @ fc1_weight_float[:, hidden_size:hidden_size * 2].T
+    fc1_extra_weight = fc1_weight_float[:, hidden_size * 2:]
 
     return feature_us_projection, feature_them_projection, fc1_extra_weight
 
@@ -73,10 +56,10 @@ def write_tensor_blob(handle, tensor_map):
     manifest_tensors = {}
 
     for name, tensor in tensor_map:
-        flat = flatten_tensor_f32(tensor)
+        flat = flatten_tensor(tensor)
         handle.write(flat.tobytes(order="C"))
         manifest_tensors[name] = {
-            "offset": offset,
+            "offset": offset, # where in the binary file this tensor's data starts
             "length": int(flat.size),
             "dtype": "float32",
         }
@@ -100,31 +83,33 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
 
     embedding_rows, hidden_size = embedding.shape
     feature_count = embedding_rows - 1
-    if feature_count != 64 * PIECE_FEATURES_PER_KING:
-        raise ValueError(f"Expected {64 * PIECE_FEATURES_PER_KING} NNUE features, got {feature_count}")
 
     fc1_out, fc1_in = fc1_weight.shape
     fc2_out, fc2_in = fc2_weight.shape
     fc3_out, fc3_in = fc3_weight.shape
+
     base_input_size = hidden_size * 2
     extra_input_count = fc1_in - base_input_size
     extra_feature_layout = model_config.get("extra_feature_layout")
 
-    if extra_input_count not in (0, EXTRA_FEATURE_COUNT):
-        raise ValueError(f"Unsupported extraInputCount={extra_input_count}")
-    if extra_input_count == EXTRA_FEATURE_COUNT and extra_feature_layout != EXTRA_FEATURE_LAYOUT:
+    # makes sure the model has the expected architecture for the extra features
+    if extra_input_count == EXTRA_FEATURE_COUNT and extra_feature_layout != "stm_castling_ep":
         raise ValueError(
-            f"Expected extra_feature_layout={EXTRA_FEATURE_LAYOUT}, got {extra_feature_layout}"
+            f"Expected extra_feature_layout=stm_castling_ep, got {extra_feature_layout}"
         )
 
+    # projects all the features onto the first layer
     feature_us_projection, feature_them_projection, fc1_extra_weight = project_embeddings(
         embedding,
         fc1_weight,
         hidden_size,
     )
+
     king_us_bias = torch.zeros((64, fc1_out), dtype=torch.float32)
     king_them_bias = torch.zeros((64, fc1_out), dtype=torch.float32)
 
+    # the list of tensors to write to the binary file
+    # bias is basically a shifted baseline that lets neurons have a default tendency
     tensor_map = [
         ("kingUsBias", king_us_bias),
         ("kingThemBias", king_them_bias),
@@ -140,10 +125,11 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     binary_path.parent.mkdir(parents=True, exist_ok=True)
-
+    
     with binary_path.open("wb") as handle:
         tensor_manifest, total_bytes = write_tensor_blob(handle, tensor_map)
 
+    # manifest is a json files that describes the architecture of the bin file for runtime usage
     manifest = {
         "version": 2,
         "featureCount": feature_count,
@@ -172,6 +158,7 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
     with manifest_path.open("w", encoding="utf-8") as handle:
         json.dump(manifest, handle, separators=(",", ":"))
 
+    # logging
     print(f"Exported NNUE manifest to {manifest_path}")
     print(f"Exported NNUE weights to {binary_path}")
     print(f"featureCount={feature_count}")
@@ -184,28 +171,10 @@ def export_nnue_bin(input_path, manifest_path, binary_path):
     print(f"fc3={fc3_out}x{fc3_in}")
     print(f"totalBytes={total_bytes}")
 
-
+# runs it ig
 def main():
-    parser = argparse.ArgumentParser(description="Export NNUE weights to manifest JSON + binary blob")
-    parser.add_argument("--input", "-i", required=True, help="Path to .pth checkpoint")
-    parser.add_argument(
-        "--manifest",
-        "-m",
-        default="public/models/nnue_manifest.json",
-        help="Path to output manifest JSON",
-    )
-    parser.add_argument(
-        "--binary",
-        "-b",
-        default=None,
-        help="Path to output binary blob (defaults to nnue_weights.bin beside the manifest)",
-    )
-    args = parser.parse_args()
-    manifest_path = Path(args.manifest)
-    binary_path = Path(args.binary) if args.binary else default_binary_path(manifest_path)
-
     try:
-        export_nnue_bin(Path(args.input), manifest_path, binary_path)
+        export_nnue_bin(INPUT_PATH, MANIFEST_PATH, BINARY_PATH)
     except (KeyError, ValueError) as error:
         print(f"Export failed: {error}", file=sys.stderr)
         sys.exit(1)
