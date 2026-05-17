@@ -66,7 +66,7 @@ export function addDelta(state, model, feature, delta) {
 // This is pretty simple it just converts one piece on one square into the
 // single sparse nnue feature id that the model wants
 export function getFeatIndex(color, type, boardSq, side, kingSq) {
-    const bucket = TRAIN_TYPE_BY_PIECE[type];
+    let bucket = TRAIN_TYPE_BY_PIECE[type];
     if (color !== side) {
         bucket += 5;
     }
