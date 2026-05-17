@@ -14,13 +14,15 @@ MIN_DEPTH = 30
 BATCH_SIZE = 256
 EPOCHS = 12
 LEARNING_RATE = 3e-4
-WEIGHT_DECAY = 1e-5
-HIDDEN_SIZE = 256
-FC1_SIZE = 128
-FC2_SIZE = 64
-DROPOUT = 0.10
-GRAD_CLIP_NORM = 1.0
-LR_PATIENCE = 2
+
+WEIGHT_DECAY = 1e-5 # penalty that pushes weights to stay smaller
+HIDDEN_SIZE = 256 # width of each nnue feature
+FC1_SIZE = 128 # width of first dense layer which is what it gets compressed to
+FC2_SIZE = 64 # width of second dense layer
+DROPOUT = 0.10 # percentage of neurons to randomly turn off during training to prevent overfitting
+GRAD_CLIP_NORM = 1.0 # cap on gradient size to prevent exploding gradients
+LR_PATIENCE = 2 # num of epochs to wait for improvement before reducing learning rate
+
 MODEL_DIR = Path("training/models")
 NNUE_MODEL_PATH = MODEL_DIR / "nnue" / (
     f"best_{ROW_LIMIT // 1000}krows_{EPOCHS}epochs_"
@@ -35,50 +37,58 @@ elif torch.backends.mps.is_available():
 else:
     DEVICE = torch.device("cpu")
 
-
+# class for the NNUE model
 class NNUENet(nn.Module):
-    def __init__(
-        self,
-        feature_count=NNUE_FEATURES,
-        hidden_size=HIDDEN_SIZE,
-        extra_feature_count=NNUE_EXTRA_FEATURES,
-        fc1_size=FC1_SIZE,
-        fc2_size=FC2_SIZE,
-        dropout=DROPOUT,
-    ):
+    def __init__(self):
         super().__init__()
-        self.feature_count = feature_count
-        self.hidden_size = hidden_size
-        self.extra_feature_count = extra_feature_count
+        self.feature_count = NNUE_FEATURES
+        self.hidden_size = HIDDEN_SIZE
+        self.extra_feature_count = NNUE_EXTRA_FEATURES
         self.extra_feature_layout = NNUE_EXTRA_FEATURE_LAYOUT
-        self.fc1_size = fc1_size
-        self.fc2_size = fc2_size
-        self.dropout_rate = dropout
+        self.fc1_size = FC1_SIZE
+        self.fc2_size = FC2_SIZE
+        self.dropout_rate = DROPOUT
 
+        # makes giant tables where each feature id maps to a vector of hidden_size
         self.feature_embeddings = nn.Embedding(
             feature_count + 1,
             hidden_size,
             padding_idx=feature_count,
         )
+
+        # the sizes it maps from and to
         self.fc1 = nn.Linear(hidden_size * 2 + extra_feature_count, fc1_size)
         self.fc2 = nn.Linear(fc1_size, fc2_size)
         self.fc3 = nn.Linear(fc2_size, 1)
+
+        # just the drop out layer that randomly turns off neurons
         self.dropout = nn.Dropout(dropout)
         self._reset_parameters()
 
+    # reset parameters overrides the defalualt torch initialization
+    # the reason you want to do this is because i have to get rid of the fake feature IDs
+    # that were put in there during padding
     def _reset_parameters(self):
-        nn.init.normal_(self.feature_embeddings.weight, mean=0.0, std=0.02)
+        nn.init.normal_(self.feature_embeddings.weight, mean=0.0, std=0.02) # fills with random nums
+        
+        # this zeros out the fake feature IDs
         with torch.no_grad():
             self.feature_embeddings.weight[self.feature_count].zero_()
 
         for layer in (self.fc1, self.fc2, self.fc3):
-            nn.init.xavier_uniform_(layer.weight)
-            nn.init.zeros_(layer.bias)
+            nn.init.xavier_uniform_(layer.weight) # fills with random nums but in a way that preserves variance across layers/sensible for their size
+            nn.init.zeros_(layer.bias) # sets all the biases to zero
 
+    # forward is how the data flows through the model
     def forward(self, us, them, extra_features):
+        # each position because one summed us and them vector
         us = self.feature_embeddings(us).sum(dim=1)
         them = self.feature_embeddings(them).sum(dim=1)
 
+        # joins the us them and extra features together
+        # then it goes through each layer and clamps between 0 and 1
+        # dropout is just randomly turning off neurons during training to prevent overfitting
+        # finally tanh sqaushes the vector to be between -1 and 1
         x = torch.cat([us, them, extra_features], dim=1)
         x = torch.clamp(self.fc1(x), 0.0, 1.0)
         x = self.dropout(x)
@@ -87,6 +97,7 @@ class NNUENet(nn.Module):
         x = torch.tanh(self.fc3(x))
         return x
 
+    # uhhh exports the meta data? for checkpoints
     def export_metadata(self):
         return {
             "feature_count": self.feature_count,

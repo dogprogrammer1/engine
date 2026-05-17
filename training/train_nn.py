@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, random_split
 
 from training.dataset import ChessDataset, load_rows
 
-
+# Constants this is currently the best ones i found but there might be better
 DATA_PATH = "data/train-00000.parquet"
 ROW_LIMIT = 100_000
 MIN_DEPTH = 25
@@ -21,8 +21,13 @@ if torch.cuda.is_available():
 else:
     DEVICE = torch.device("cpu")
 
+# This is a simple convolutional neural network for chess position evaluation
 class ChessModel(nn.Module):
     def __init__(self):
+        # This looks kinda fancy but it's pretty simple
+        # Basically input has 18 channels but then outputs 32 channels
+        # Then ReLu adds non linearity by getting rid of negatives
+        # Then you flatten and relu and flatten again boom it works
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(18, 32, kernel_size=3, padding=1),
@@ -36,10 +41,13 @@ class ChessModel(nn.Module):
             nn.Tanh(),
         )
 
+    # self explanatory just inputs x through the net
     def forward(self, x):
         return self.net(x)
 
-
+# loads the rows from teh parquet file
+# wrap them in the dataset object from datset.py
+# then split that dataset into train and validation and yeah wrap it again in dataloaders
 def make_loaders():
     df = load_rows(DATA_PATH, limit=ROW_LIMIT, min_depth=MIN_DEPTH)
     dataset = ChessDataset(df)
@@ -57,18 +65,21 @@ def make_loaders():
 
     return train_loader, val_loader
 
-
+# loop through all batches once and update weights
 def train_one_epoch(model, loader, optimizer, loss_fn):
     model.train()
     total_loss = 0.0
 
     for inputs, targets in loader:
         inputs = inputs.to(DEVICE)
-        targets = targets.to(DEVICE).unsqueeze(1)
+        targets = targets.to(DEVICE).unsqueeze(1) # unsqueeze adds dimensions
 
-        optimizer.zero_grad()
+        optimizer.zero_grad() # clear old gradients
         predictions = model(inputs)
         loss = loss_fn(predictions, targets)
+
+        # This computes gradients for every trainable weight to reduce loss
+        # and then it updates the weights
         loss.backward()
         optimizer.step()
 
@@ -76,7 +87,7 @@ def train_one_epoch(model, loader, optimizer, loss_fn):
 
     return total_loss / len(loader)
 
-
+# pretty simple loop through validation set and compute average loss without updating weights
 def validate(model, loader, loss_fn):
     model.eval()
     total_loss = 0.0
@@ -93,13 +104,14 @@ def validate(model, loader, loss_fn):
     return total_loss / len(loader)
 
 
+# uh it's the main function? just puts everything together
 def main():
-    NN_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NN_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True) # just chore to create output folder
 
-    train_loader, val_loader = make_loaders()
+    train_loader, val_loader = make_loaders() # build the dataloaders
 
     model = ChessModel().to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE) # sets up adam to update model weights
     loss_fn = nn.MSELoss()
     best_val_loss = float("inf")
 

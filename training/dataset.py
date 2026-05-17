@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 from training.fen_helpers import encode_fen, encode_fen_NNUE, NNUE_FEATURES
 
-
+# turn engine evals which had a giant range to be between -1 and 1
 def eval_to_target(cp, mate):
     if pd.notna(mate):
         return 1.0 if float(mate) > 0 else -1.0
@@ -18,7 +18,7 @@ def eval_to_target(cp, mate):
 
     return math.tanh(float(cp) / 400.0)
 
-
+# Load the rows from parquet, filter by depth, and compute targets
 def load_rows(path, limit=100_000, min_depth=25, columns=None):
     if columns is None:
         columns = ["fen", "depth", "cp", "mate"]
@@ -26,8 +26,7 @@ def load_rows(path, limit=100_000, min_depth=25, columns=None):
     df = pd.read_parquet(path, columns=columns)
     df = df[df["depth"] >= min_depth]
 
-    if limit is not None:
-        df = df.head(limit)
+    df = df.head(limit)
 
     df = df.copy()
     df["target"] = [
@@ -37,7 +36,7 @@ def load_rows(path, limit=100_000, min_depth=25, columns=None):
 
     return df
 
-
+# Dataset class to hold FENs and targets
 class ChessDataset(Dataset):
     def __init__(self, df):
         self.fens = df["fen"].tolist()
@@ -46,6 +45,7 @@ class ChessDataset(Dataset):
     def __len__(self):
         return len(self.fens)
 
+    # Encode one FEN into a tensor of piece planes and pair it with its target
     def __getitem__(self, idx):
         model_input = torch.from_numpy(encode_fen(self.fens[idx]))
         target = torch.tensor(self.targets[idx], dtype=torch.float32)
@@ -59,21 +59,25 @@ class NNUEChessDataset (Dataset):
     def __len__(self):
         return len(self.fens)
     
+    # Encode one FEN into sparse NNUE features and pair it with its target
     def __getitem__ (self, idx):
         features = encode_fen_NNUE(self.fens[idx])
+
         us = torch.from_numpy(features["us"]).long()
         them = torch.from_numpy(features["them"]).long()
+
         extra = torch.from_numpy(features["extra"]).float()
         target = torch.tensor(self.targets[idx], dtype=torch.float32)
+
         return us, them, extra, target
 
-# NNUE inputs are weird ah so positions have different encoded lengths
-# so unfortunately have to add padding so everything got same length
+# Add padding at the end of the feature lists because feature lists vary in length per position
 def add_padding(batch):
     us, them, extra, targets = zip(*batch)
 
     us = pad_sequence(us, batch_first=True, padding_value=NNUE_FEATURES)
     them = pad_sequence(them, batch_first=True, padding_value=NNUE_FEATURES)
+    
     extra = torch.stack(extra)
     targets = torch.stack(targets)
 

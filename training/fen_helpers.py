@@ -1,5 +1,7 @@
 import numpy as np
 
+# Each piece corresponds to a plane in an 18x8x8 tensor
+# This is how the neural network is gonna see the board
 PIECE_TO_PLANE = {
     "P": 0,
     "B": 1,
@@ -20,7 +22,7 @@ NNUE_FEATURES = 64 * NNUE_SQUARES
 NNUE_EXTRA_FEATURE_LAYOUT = "stm_castling_ep"
 NNUE_EXTRA_FEATURES = 14
 
-# Engine piece ids are P, B, N, R, Q, K while NNUE training buckets are P, N, B, R, Q.
+# This is for the nnue
 PIECE_TYPE = {
     "P": 0,
     "N": 1,
@@ -29,20 +31,17 @@ PIECE_TYPE = {
     "Q": 4,
 }
 
-
+# Really cool encoder for NN training it just turns FEN into 18x8x8 tensor :O
+#     what each plane does:
+#     0-5   white pieces
+#     6-11  black pieces
+#     12    wtv side to move
+#     13    white kingside castling
+#     14    white queenside castling
+#     15    black kingside castling
+#     16    black queenside castling
+#     17    en passant square
 def encode_fen(fen):
-    """Really cool encoder for NN training it just turns FEN into 18x8x8 tensor :O
-    what each plane does:
-    0-5   white pieces
-    6-11  black pieces
-    12    wtv side to move
-    13    white kingside castling
-    14    white queenside castling
-    15    black kingside castling
-    16    black queenside castling
-    17    en passant square
-    """
-
     parts = fen.strip().split()
 
     piece_placement, active_color, castling, en_passant = parts[:4]
@@ -85,7 +84,7 @@ def encode_fen(fen):
 def _mirror_square(square):
     return square ^ 56
 
-# parses FEN to board array
+# parses FEN to board dictionary
 def _parse_fen(fen):
     board_fen = fen.strip().split()[0]
     board = {}
@@ -130,7 +129,7 @@ def _feature_index(piece, square, king, perspective):
 
     return king * NNUE_SQUARES + feature
 
-
+# uh self explanatory function it just encodes the FEN into the spare features
 def _encode_one_side(board, perspective):
     if perspective == "w":
         king = "K"
@@ -156,15 +155,18 @@ def _encode_one_side(board, perspective):
             
     return np.array(indices, dtype=np.int32)
 
-
+# extra features is just side to move, castling rights, and en passant encoded as a 14 element vector
 def _encode_extra_features(side, castling, en_passant):
     extras = np.zeros(NNUE_EXTRA_FEATURES, dtype=np.float32)
-    us_is_white = side == "w"
 
-    extras[0] = 1.0 if us_is_white else 0.0
-    extras[1] = 0.0 if us_is_white else 1.0
+    if side == "w":
+        extras[0] = 1.0
+        extras[1] = 0.0
+    else:
+        extras[0] = 0.0
+        extras[1] = 1.0
 
-    if us_is_white:
+    if side == "w":
         extras[2] = 1.0 if "K" in castling else 0.0
         extras[3] = 1.0 if "Q" in castling else 0.0
         extras[4] = 1.0 if "k" in castling else 0.0
@@ -181,10 +183,8 @@ def _encode_extra_features(side, castling, en_passant):
 
     return extras
 
-# Returns:
-# "us": side to move indices
-# "them": opponent indices
-
+# This is different from the parse FEN NN uses
+# this encodes the FEN to sparse features for us and them perspective as well as extras
 def encode_fen_NNUE(fen):
     parts = fen.strip().split()
     
