@@ -1,5 +1,5 @@
 import { pieceValues, pieceSquareTables } from "./tables.js";
-import { evaluateBoardWithDefaultNNUE, hasDefaultNNUEModel } from "./nnue.js";
+import { evaluateBoardWithDefaultNNUE, hasDefaultNNUEModel } from "./nnue_evaluator.js";
 
 export const evaluationMethods = {
     evaluateBoard() {

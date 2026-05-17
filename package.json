@@ -2,9 +2,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "sync:nnue-assets": "mkdir -p public/training/models/weights && cp training/models/weights/nnue_manifest.json training/models/weights/nnue_weights.bin public/training/models/weights/",
+    "dev": "npm run sync:nnue-assets && vite",
+    "build": "npm run sync:nnue-assets && vite build",
+    "preview": "npm run sync:nnue-assets && vite preview",
     "validate:nnue": "node scripts/validate_nnue_incremental.mjs"
   },
   "devDependencies": {
