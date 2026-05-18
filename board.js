@@ -3,7 +3,7 @@ import {
     applyMoveToBoardNNUE,
     invalidateBoardNNUE,
     unmakeMoveToBoardNNUE
-} from "./engine/nnue_evaluator.js";
+} from "./engine/nnue/nnue_evaluator.js";
 class Llong {
     constructor(x = 0n) {
         this.val = x;
