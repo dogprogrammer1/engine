@@ -354,19 +354,19 @@ class Camera {
       this.transform.position[1] -= this.speed;
     }
 
-    if (this.keys["ArrowRight"]) {
+    if (this.keys["KeyL"]) {
       this.transform.rotate([0, 1, 0], this.rotSpeed);
     }
 
-    if (this.keys["ArrowLeft"]) {
+    if (this.keys["KeyJ"]) {
       this.transform.rotate([0, 1, 0], -this.rotSpeed);
     }
 
-    if (this.keys["ArrowDown"]) {
+    if (this.keys["KeyK"]) {
       this.transform.rotate(right, this.rotSpeed);
     }
 
-    if (this.keys["ArrowUp"]) {
+    if (this.keys["KeyI"]) {
       this.transform.rotate(right, -this.rotSpeed);
     }
   }
