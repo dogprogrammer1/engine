@@ -47,6 +47,9 @@ export default class Game {
         };
         this.humanColor = null;
         this.botConfigs = this.cloneBotConfigs(DEFAULT_BOT_CONFIGS);
+        this.isDestroyed = false;
+        this.lastEvalText = null;
+        this.lastSideText = null;
 
         this.engineWorker = this.createEngineWorker();
     }
@@ -138,7 +141,7 @@ export default class Game {
     }
 
     makeEngineMove() {
-        if (this.engineThinking || this.board.gameResult?.over) {
+        if (this.isDestroyed || this.engineThinking || this.board.gameResult?.over) {
             return;
         }
 
@@ -161,6 +164,10 @@ export default class Game {
     }
 
     handleEngineWorkerMessage(data) {
+        if (this.isDestroyed) {
+            return;
+        }
+
         if (data.type !== "bestMove") {
             if (data.type === "error") {
                 console.error("Engine worker error:", data.message, data.stack);
@@ -218,6 +225,10 @@ export default class Game {
     }
 
     scheduleNextMove(delay = 350) {
+        if (this.isDestroyed) {
+            return;
+        }
+
         this.clearMoveTimer();
 
         this.moveTimer = setTimeout(() => {
@@ -237,9 +248,10 @@ export default class Game {
     }
 
     destroy() {
+        this.isDestroyed = true;
         this.clearMoveTimer();
-
-        this.engineWorker.terminate();
+        this.engineWorker?.terminate();
+        this.engineWorker = null;
     }
 
     startManualPlay(playerSide = "white", evaluator = "classical") {
@@ -301,8 +313,13 @@ export default class Game {
             ? evaluatorLabel(blackStats.evaluator)
             : (this.botConfigs[BLACK]?.label ?? HUMAN_LABEL);
 
-        this.evalDisplay.textContent =
+        const evalText =
             `Turn: ${sideToMove} (${currentBot}) | Last think times - White: ${whiteTime}, Black: ${blackTime}`;
+
+        if (this.lastEvalText !== evalText) {
+            this.evalDisplay.textContent = evalText;
+            this.lastEvalText = evalText;
+        }
 
         if (this.sideDisplay) {
             let gameStatus = "";
@@ -316,8 +333,11 @@ export default class Game {
                 }
             }
 
-            this.sideDisplay.textContent =
-                `White: ${whiteLabel} | Black: ${blackLabel}${gameStatus}`;
+            const sideText = `White: ${whiteLabel} | Black: ${blackLabel}${gameStatus}`;
+            if (this.lastSideText !== sideText) {
+                this.sideDisplay.textContent = sideText;
+                this.lastSideText = sideText;
+            }
         }
     }
 }

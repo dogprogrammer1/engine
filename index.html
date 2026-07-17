@@ -3,189 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Chess Engine</title>
-    <style>
-        :root {
-            color-scheme: dark;
-            font-family: Arial, sans-serif;
-        }
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background: #111;
-            color: white;
-            overflow: hidden;
-        }
-
-        canvas {
-            display: block;
-            cursor: pointer;
-        }
-
-        #app {
-            position: relative;
-            min-height: 100vh;
-        }
-
-        #hud {
-            position: fixed;
-            top: 16px;
-            left: 16px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-width: min(420px, calc(100vw - 32px));
-            padding: 12px;
-            background: rgba(15, 15, 15, 0.82);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 10px;
-            backdrop-filter: blur(8px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-        }
-
-        #controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        #controls button,
-        #controls select {
-            font: 12px Arial, sans-serif;
-            padding: 8px 10px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            background: #202020;
-            color: white;
-        }
-
-        #statusPanel {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            font: 12px Arial, sans-serif;
-        }
-
-        #statusPanel > div {
-            line-height: 1.4;
-            word-break: break-word;
-        }
-    </style>
+    <meta name="theme-color" content="#15120f">
+    <title>Chess Arena</title>
+    <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-    <div id="app">
-        <canvas id="canvas" aria-label="Chess board"></canvas>
-        <div id="hud">
+    <main id="app">
+        <canvas id="canvas" tabindex="0" aria-label="Interactive chess board" aria-describedby="rendererInfo"></canvas>
+        <aside id="hud" aria-label="Game controls and status">
+            <p class="eyebrow">Chess Arena</p>
+            <h1>Tournament Board</h1>
             <div id="controls">
-                <button id="newGameBtn" aria-label="Start a new game">Reset Game</button>
-                <select id="gameModeSelect" aria-label="Select game mode">
-                    <option value="auto">Auto Play</option>
-                    <option value="manual">Manual play as white against classical</option>
-                    <option value="manualBlack">Manual play as black against classical</option>
-                    <option value="manualNNUEWhite">Manual play as white against NNUE</option>
-                    <option value="manualNNUEBlack">Manual play as black against NNUE</option>
-                </select>
+                <label>
+                    View
+                    <select id="rendererSelect" aria-label="Select board view">
+                        <option value="3d">3D tournament view</option>
+                        <option value="2d">2D board view</option>
+                    </select>
+                </label>
+                <label>
+                    Opponent
+                    <select id="gameModeSelect" aria-label="Select game mode">
+                        <option value="auto">Engine vs engine</option>
+                        <option value="manual" selected>Play white vs classical</option>
+                        <option value="manualBlack">Play black vs classical</option>
+                        <option value="manualNNUEWhite">Play white vs NNUE</option>
+                        <option value="manualNNUEBlack">Play black vs NNUE</option>
+                    </select>
+                </label>
+                <button id="newGameBtn" type="button">New game</button>
             </div>
             <div id="statusPanel">
-                <div id="sideDisplay" aria-live="polite">White: Classical | Black: NNUE_Evaluator</div>
-                <div id="evalDisplay" aria-live="polite">Classical eval: 0.00</div>
+                <div id="sideDisplay" aria-live="polite">White: Human | Black: Classical</div>
+                <div id="evalDisplay" aria-live="polite">Preparing board…</div>
                 <div id="rendererInfo" aria-live="polite"></div>
             </div>
-        </div>
-    </div>
-    <script type="module">
-        import Game from "./game.js";
-        import Renderer2D from "./renderer/2drenderer.js";
-        import Renderer3D from "./renderer/3drenderer.js";
-        import { BOARD_SIZE, SQUARE_SIZE } from "./ui-constants.js";
-
-        const RENDERER_MODE = "3d";
-        const USE_3D_RENDERER = RENDERER_MODE === "3d";
-
-        const canvas = document.getElementById("canvas");
-        const newGameBtn = document.getElementById("newGameBtn");
-        const evalDisplay = document.getElementById("evalDisplay");
-        const sideDisplay = document.getElementById("sideDisplay");
-        const rendererInfo = document.getElementById("rendererInfo");
-        const gameModeSelect = document.getElementById("gameModeSelect");
-        const renderer = USE_3D_RENDERER
-            ? new Renderer3D(canvas)
-            : new Renderer2D(canvas);
-
-        let game;
-
-        rendererInfo.textContent = USE_3D_RENDERER
-            ? "3D controls: WASD move, IJKL rotate, Space/Shift up/down."
-            : "2D renderer active.";
-
-        function getPlayerColorForMode(mode) {
-            return mode === "manualBlack" || mode === "manualNNUEBlack" ? 1 : 0;
-        }
-
-        function initializeGame(mode = gameModeSelect.value) {
-            if (game) {
-                game.destroy();
-            }
-
-            game = new Game(
-                renderer,
-                getPlayerColorForMode(mode),
-                evalDisplay,
-                sideDisplay
-            );
-
-            if (mode === "auto") {
-                game.startAutoPlay();
-            } else if (mode === "manual") {
-                game.startManualPlay("white", "classical");
-            } else if (mode === "manualBlack") {
-                game.startManualPlay("black", "classical");
-            } else if (mode === "manualNNUEWhite") {
-                game.startManualPlay("white", "nnue");
-            } else if (mode === "manualNNUEBlack") {
-                game.startManualPlay("black", "nnue");
-            }
-
-            game.draw();
-        }
-
-        initializeGame(gameModeSelect.value);
-
-        newGameBtn.addEventListener("click", () => {
-            initializeGame(gameModeSelect.value);
-        });
-
-        gameModeSelect.addEventListener("change", () => {
-            initializeGame(gameModeSelect.value);
-        });
-
-        if (USE_3D_RENDERER) {
-            canvas.addEventListener("boardClick", (event) => {
-                const { x, y } = event.detail;
-                game.click(x, y);
-            });
-
-            function renderLoop() {
-                game.draw();
-                requestAnimationFrame(renderLoop);
-            }
-
-            renderLoop();
-        } else {
-            canvas.addEventListener("click", (event) => {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const x = Math.floor(((event.clientX - rect.left) * scaleX) / SQUARE_SIZE);
-                const y = Math.floor(((event.clientY - rect.top) * scaleY) / SQUARE_SIZE);
-
-                if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
-                    game.click(x, y);
-                }
-            });
-        }
-    </script>
+        </aside>
+    </main>
+    <script type="module" src="./app.js"></script>
 </body>
 </html>

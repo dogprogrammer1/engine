@@ -90,6 +90,7 @@ export default class Board {
         this.enPassant = [-1, -1];
         this.turn = WHITE;
         this.halfmoveClock = 0;
+        this.fullmoveNumber = 1;
         this.moveHistory = [];
 
         this.steps = {
@@ -438,6 +439,7 @@ export default class Board {
             enPassant: [...this.enPassant],
             turn: this.turn,
             halfmoveClock: this.halfmoveClock,
+            fullmoveNumber: this.fullmoveNumber,
             gameResult: this.gameResult,
             rookMove: null,
             enPassantCapture: null,
@@ -578,6 +580,7 @@ export default class Board {
         this.enPassant = [...undo.enPassant];
         this.turn = undo.turn;
         this.halfmoveClock = undo.halfmoveClock;
+        this.fullmoveNumber = undo.fullmoveNumber;
         this.gameResult = undo.gameResult;
         unmakeMoveToBoardNNUE(this, undo);
     }
@@ -593,6 +596,7 @@ export default class Board {
             ep: [...this.enPassant],
             turn: this.turn,
             halfmoveClock: this.halfmoveClock,
+            fullmoveNumber: this.fullmoveNumber,
             gameResult: this.gameResult
         };
     }
@@ -608,6 +612,7 @@ export default class Board {
         this.enPassant = [...s.ep];
         this.turn = s.turn;
         this.halfmoveClock = s.halfmoveClock;
+        this.fullmoveNumber = s.fullmoveNumber ?? 1;
         this.gameResult = s.gameResult;
         this.rebuildSquares();
     }
@@ -822,7 +827,7 @@ export default class Board {
             ? "-"
             : this.squareName(this.enPassant[0], this.enPassant[1]);
         
-        return `${ranks.join("/")} ${this.turn === WHITE ? "w" : "b"} ${castling} ${enPassant} 0 1`;
+        return `${ranks.join("/")} ${this.turn === WHITE ? "w" : "b"} ${castling} ${enPassant} ${this.halfmoveClock} ${this.fullmoveNumber}`;
     }
 
     move(x1, y1, x2, y2, promotionType = QUEEN) {
@@ -834,6 +839,9 @@ export default class Board {
 
         this.makeMove(x1, y1, x2, y2, promotionType);
         this.turn = 1 - this.turn;
+        if (this.turn === WHITE) {
+            this.fullmoveNumber++;
+        }
         this.moveHistory.push(this.toFEN());
         
         // Update game result after move
@@ -871,7 +879,7 @@ export default class Board {
         }
 
         // King and two knights vs king (cannot force checkmate)
-        if (pieces.length === 3) {
+        if (pieces.length === 4) {
             const knights = pieces.filter(p => p.type === KNIGHT);
             if (knights.length === 2 && knights.every(k => k.color === knights[0].color)) {
                 return true;
